@@ -1,0 +1,95 @@
+Exactly! You want the user to input a full IP like 10.2.12.12, but the script should extract only the first 3 octets (10.2.12.) and let the fourth octet vary as needed.
+
+
+---
+
+✅ Final Solution Approach
+
+1. Ask the user:
+"Enter base IP (e.g. 10.2.12.12):"
+
+
+2. Split it into parts using ..
+
+
+3. Keep only the first 3 parts to form 10.2.12..
+
+
+4. Use the last part (12) as the starting point for incrementing IPs.
+
+
+
+
+---
+
+✅ Working Code Snippet
+
+# ==== CONFIG (Dynamic Base IP and Target Generation) ====
+USERNAME = "posuser"
+PASSWORD = "till@123"
+
+SOURCE_FOLDER = "/home/posuser/ETPStoreFrontV55"
+DEST_FOLDER = "/home/posuser/ETPSuite"
+
+# Get base IP from user input
+full_ip = input("Enter base IP (e.g. 10.2.12.12): ").strip()
+
+# Split IP and validate
+ip_parts = full_ip.split(".")
+if len(ip_parts) != 4 or not all(part.isdigit() and 0 <= int(part) <= 255 for part in ip_parts):
+    print("❌ Invalid IP format. Please enter like 10.2.12.12")
+    exit()
+
+# Form base IP using first 3 octets
+base_ip = ".".join(ip_parts[:3]) + "."
+
+# Get starting octet from input
+start_octet = int(ip_parts[3])
+
+# Get number of tills from user input
+num_tills = int(input("Enter number of tills: ").strip())
+
+# Generate list of IPs from starting octet
+ALL_TILLS = [f"{base_ip}{start_octet + i}" for i in range(num_tills)]
+
+# First is source, rest are targets
+SOURCE_TILL = ALL_TILLS[0]
+TARGET_TILLS = ALL_TILLS[1:]
+
+# Show the result
+print("\n✅ Generated Tills:")
+print("Source Till:", SOURCE_TILL)
+print("Target Tills:", TARGET_TILLS)
+print()
+
+
+---
+
+✅ Example Run
+
+User Input:
+
+Enter base IP (e.g. 10.2.12.12): 10.2.12.112
+Enter number of tills: 5
+
+Output:
+
+✅ Generated Tills:
+Source Till: 10.2.12.112
+Target Tills: ['10.2.12.113', '10.2.12.114', '10.2.12.115', '10.2.12.116']
+
+
+---
+
+✅ Notes:
+
+✔ User enters full IP (10.2.12.12) but only first 3 octets are used.
+✔ Last octet is the starting point and increments as needed.
+✔ Input is validated to be a proper IP address.
+✔ Flexible for different base IP ranges like 192.168.1.10, etc.
+
+
+---
+
+If you want, I can now integrate this into the full file transfer script with all print statements, error handling, and timeout logic included. Just say “go ahead” and I’ll prepare the complete final script for you! 📂🚀📲
+
