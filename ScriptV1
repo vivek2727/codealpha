@@ -1,0 +1,80 @@
+import paramiko 
+import socket
+import time
+
+# ==== CONFIG ====
+SOURCE_TILL = "10.13.0.35"
+TARGET_TILLS = ["10.13.0.35", "10.13.0.75", "10.13.0.115", "10.13.0.81"]
+USERNAME = "posuser"
+PASSWORD = "till@123"
+
+SOURCE_FOLDER = "/home/posuser/ETPStoreFrontV5.5"
+DEST_FOLDER = "/home/posuser/ETPSuite"
+
+# ==== FUNCTION TO CONNECT WITH TIMEOUT ====
+def ssh_connect(ip, timeout=10):
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(ip, username=USERNAME, password=PASSWORD, timeout=timeout)
+        return client
+    except (paramiko.AuthenticationException, paramiko.SSHException, socket.error, socket.timeout):
+        return None
+
+# ==== MAIN SCRIPT ====
+print("🚀 Starting File Transfer Automation...\n")
+
+# Step 1: Connect to Till 1
+print(f"🔐 Connecting to Till 1 ({SOURCE_TILL})...")
+source_client = ssh_connect(SOURCE_TILL)
+if not source_client:
+    print(f"❌ Could not connect to Till 1 ({SOURCE_TILL}). Exiting.")
+    exit()
+
+print("✅ Connected to Till 1.")
+
+# Step 2: Check if source folder exists on Till 1
+print(f"📂 Checking if source folder exists: {SOURCE_FOLDER}")
+stdin, stdout, stderr = source_client.exec_command(f"ls {SOURCE_FOLDER}")
+if "No such file" in stderr.read().decode():
+    print(f"❌ Source folder {SOURCE_FOLDER} not found on Till 1.")
+    source_client.close()
+    exit()
+else:
+    print("✅ Source folder found on Till 1.\n")
+
+# Step 3: Transfer to each target till
+for till in TARGET_TILLS:
+    print(f"➡️ Processing Till {till} ...")
+
+    # Check if till is reachable
+    print(f"🔌 Trying to connect to {till} (10 sec timeout)...")
+    target_client = ssh_connect(till, timeout=10)
+
+    if not target_client:
+        print(f"❌ Till {till} not in network. Skipping.\n")
+        continue
+    print(f"✅ Till {till} is reachable.")
+
+    # Run scp from Till 1 to this target till
+    scp_cmd = f"scp -r {SOURCE_FOLDER} {USERNAME}@{till}:{DEST_FOLDER}"
+    print(f"📤 Executing: {scp_cmd}")
+    stdin, stdout, stderr = source_client.exec_command(scp_cmd, get_pty=True)
+
+    # Provide password for scp authentication
+    stdin.write(PASSWORD + "\n")
+    stdin.flush()
+
+    # Wait for completion
+    exit_status = stdout.channel.recv_exit_status()
+    if exit_status == 0:
+        print(f"✅ Successfully copied folder to Till {till}\n")
+    else:
+        error_msg = stderr.read().decode()
+        print(f"❌ Failed to copy to Till {till}. Error: {error_msg}\n")
+
+    target_client.close()
+
+# Step 4: Close source connection
+source_client.close()
+print("🎉 File Transfer Completed for all tills.")
