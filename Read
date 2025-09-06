@@ -1,1 +1,15 @@
-hz
+# ==== CONFIG (Dynamic Target Generation) ====
+base_ip = "10.2.12."   # IP prefix
+USERNAME = "posuser"
+PASSWORD = "till@123"
+
+SOURCE_FOLDER = "/home/posuser/ETPStoreFrontV55"
+DEST_FOLDER = "/home/posuser/ETPSuite"
+
+# Ask user for number of tills
+num_tills = int(input("Enter number of tills: ").strip())
+
+# Generate IPs dynamically
+ALL_TILLS = [f"{base_ip}{112 + i}" for i in range(num_tills)]
+SOURCE_TILL = ALL_TILLS[0]
+TARGET_TILLS = ALL_TILLS[1:]   # all except the first
