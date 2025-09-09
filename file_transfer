@@ -1,53 +1,108 @@
-2025-09-09 19:47:27,917 - ERROR - Invalid IP format. Please enter like 10.2.12.12
-2025-09-09 19:47:53,575 - INFO - Generated Tills:
-2025-09-09 19:47:53,577 - INFO - Source Till: 10.13.0.35
-2025-09-09 19:47:53,578 - INFO - Target Tills: ['10.13.0.35', '10.13.0.36', '10.13.0.37', '10.13.0.38']
-2025-09-09 19:47:53,579 - INFO - Starting File Transfer Automation...
-2025-09-09 19:47:53,580 - INFO - Connecting to Till 1 (10.13.0.35)...
-2025-09-09 19:47:53,629 - INFO - Connected (version 2.0, client OpenSSH_7.6p1)
-2025-09-09 19:47:53,743 - INFO - Authentication (password) successful!
-2025-09-09 19:47:53,743 - INFO - Connected to Till 1.
-2025-09-09 19:47:53,744 - INFO - Uploading local folder C:\Source\ETPStoreFrontV5.5 to /home/posuser/ETPStoreFrontV5.5 on Till 1...
-2025-09-09 19:47:54,048 - INFO - [chan 0] Opened sftp connection (server version 3)
-2025-09-09 19:47:54,099 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\closedwatermark_1024.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/closedwatermark_1024.png
-2025-09-09 19:47:54,116 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\closedwatermark_1024_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/closedwatermark_1024_Dark_Theme.png
-2025-09-09 19:47:54,139 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\closedwatermark_1360.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/closedwatermark_1360.png
-2025-09-09 19:47:54,165 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\closedwatermark_1360_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/closedwatermark_1360_Dark_Theme.png
-2025-09-09 19:47:54,181 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\logo.jpg to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/logo.jpg
-2025-09-09 19:47:54,203 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\logo1.JPG to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/logo1.JPG
-2025-09-09 19:47:54,224 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_1024.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_1024.png
-2025-09-09 19:47:54,262 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_1024_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_1024_Dark_Theme.png
-2025-09-09 19:47:54,282 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_1360.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_1360.png
-2025-09-09 19:47:54,304 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_1360_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_1360_Dark_Theme.png
-2025-09-09 19:47:54,332 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_default.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_default.png
-2025-09-09 19:47:54,360 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_default_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_default_Dark_Theme.png
-2025-09-09 19:47:54,398 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\closedwatermark_1024.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/closedwatermark_1024.png
-2025-09-09 19:47:54,429 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\closedwatermark_1024_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/closedwatermark_1024_Dark_Theme.png
-2025-09-09 19:47:54,445 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\closedwatermark_1360.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/closedwatermark_1360.png
-2025-09-09 19:47:54,472 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\closedwatermark_1360_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/closedwatermark_1360_Dark_Theme.png
-2025-09-09 19:47:54,500 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_1024.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_1024.png
-2025-09-09 19:47:54,550 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_1024_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_1024_Dark_Theme.png
-2025-09-09 19:47:54,602 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_1360.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_1360.png
-2025-09-09 19:47:54,636 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_1360_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_1360_Dark_Theme.png
-2025-09-09 19:47:54,674 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_default.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_default.png
-2025-09-09 19:47:54,708 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_default_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_default_Dark_Theme.png
-2025-09-09 19:47:54,712 - INFO - [chan 0] sftp session closed.
-2025-09-09 19:47:54,714 - INFO - Upload to Till 1 completed.
-2025-09-09 19:47:54,715 - INFO - Checking if source folder exists: /home/posuser/ETPStoreFrontV5.5
-2025-09-09 19:47:54,732 - INFO - Source folder found on Till 1.
-2025-09-09 19:47:54,733 - INFO - Processing Till 10.13.0.35 ...
-2025-09-09 19:47:54,734 - INFO - Trying to connect to 10.13.0.35 (3 sec timeout)...
-2025-09-09 19:47:54,759 - INFO - Connected (version 2.0, client OpenSSH_7.6p1)
-2025-09-09 19:47:54,868 - INFO - Authentication (password) successful!
-2025-09-09 19:47:54,869 - INFO - Till 10.13.0.35 is reachable.
-2025-09-09 19:47:54,870 - INFO - Executing: scp -r /home/posuser/ETPStoreFrontV5.5 posuser@10.13.0.35:/home/posuser/ETPSuite
-2025-09-09 19:47:55,315 - INFO - Successfully copied folder to Till 10.13.0.35
-2025-09-09 19:47:55,318 - INFO - Processing Till 10.13.0.36 ...
-2025-09-09 19:47:55,319 - INFO - Trying to connect to 10.13.0.36 (3 sec timeout)...
-2025-09-09 19:47:58,332 - ERROR - Till 10.13.0.36 not in network. Skipping.
-2025-09-09 19:47:58,333 - INFO - Processing Till 10.13.0.37 ...
-2025-09-09 19:47:58,334 - INFO - Trying to connect to 10.13.0.37 (3 sec timeout)...
-2025-09-09 19:47:58,358 - INFO - Connected (version 2.0, client OpenSSH_7.6p1)
-2025-09-09 19:47:58,467 - INFO - Authentication (password) successful!
-2025-09-09 19:47:58,469 - INFO - Till 10.13.0.37 is reachable.
-2025-09-09 19:47:58,471 - INFO - Executing: scp -r /home/posuser/ETPStoreFrontV5.5 posuser@10.13.0.37:/home/posuser/ETPSuite
+import paramiko 
+import socket
+import time
+
+# ==== CONFIG ====
+USERNAME = "posuser"
+PASSWORD = "till@123"
+
+SOURCE_FOLDER = "/home/posuser/ETPStoreFrontV5.5"
+DEST_FOLDER = "/home/posuser/ETPSuite"
+
+# Get base IP from user input
+full_ip = input("Enter base IP (e.g. 10.2.12.12): ").strip()
+
+# Split IP and validate
+ip_parts = full_ip.split(".")
+if len(ip_parts) != 4 or not all(part.isdigit() and 0 <= int(part) <= 255 for part in ip_parts):
+    print("❌ Invalid IP format. Please enter like 10.2.12.12")
+    exit()
+
+# Form base IP using first 3 octets
+base_ip = ".".join(ip_parts[:3]) + "."
+
+# Get starting octet from input
+start_octet = int(ip_parts[3])
+
+# Get number of tills from user input
+num_tills = int(input("Enter number of tills: ").strip())
+
+# Generate list of IPs from starting octet
+ALL_TILLS = [f"{base_ip}{start_octet + i}" for i in range(num_tills)]
+
+# First is source, rest are targets
+SOURCE_TILL = ALL_TILLS[0]
+TARGET_TILLS = ALL_TILLS[0:]
+
+# Show the result
+print("\n✅ Generated Tills:")
+print("Source Till:", SOURCE_TILL)
+print("Target Tills:", TARGET_TILLS)
+print()
+# ==== FUNCTION TO CONNECT WITH TIMEOUT ====
+def ssh_connect(ip, timeout=10):
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(ip, username=USERNAME, password=PASSWORD, timeout=timeout)
+        return client
+    except (paramiko.AuthenticationException, paramiko.SSHException, socket.error, socket.timeout):
+        return None
+
+# ==== MAIN SCRIPT ====
+print("🚀 Starting File Transfer Automation...\n")
+
+# Step 1: Connect to Till 1
+print(f"🔐 Connecting to Till 1 ({SOURCE_TILL})...")
+source_client = ssh_connect(SOURCE_TILL)
+if not source_client:
+    print(f"❌ Could not connect to Till 1 ({SOURCE_TILL}). Exiting.")
+    exit()
+
+print("✅ Connected to Till 1.")
+
+# Step 2: Check if source folder exists on Till 1
+print(f"📂 Checking if source folder exists: {SOURCE_FOLDER}")
+stdin, stdout, stderr = source_client.exec_command(f"ls {SOURCE_FOLDER}")
+if "No such file" in stderr.read().decode():
+    print(f"❌ Source folder {SOURCE_FOLDER} not found on Till 1.")
+    source_client.close()
+    exit()
+else:
+    print("✅ Source folder found on Till 1.\n")
+
+# Step 3: Transfer to each target till
+for till in TARGET_TILLS:
+    print(f"➡️ Processing Till {till} ...")
+
+    # Check if till is reachable
+    print(f"🔌 Trying to connect to {till} (3 sec timeout)...")
+    target_client = ssh_connect(till, timeout=3)
+
+    if not target_client:
+        print(f"❌ Till {till} not in network. Skipping.\n")
+        continue
+    print(f"✅ Till {till} is reachable.")
+
+    # Run scp from Till 1 to this target till
+    scp_cmd = f"scp -r {SOURCE_FOLDER} {USERNAME}@{till}:{DEST_FOLDER}"
+    print(f"📤 Executing: {scp_cmd}")
+    stdin, stdout, stderr = source_client.exec_command(scp_cmd, get_pty=True)
+
+    # Provide password for scp authentication
+    stdin.write(PASSWORD + "\n")
+    stdin.flush()
+
+    # Wait for completion
+    exit_status = stdout.channel.recv_exit_status()
+    if exit_status == 0:
+        print(f"✅ Successfully copied folder to Till {till}\n")
+    else:
+        error_msg = stderr.read().decode()
+        print(f"❌ Failed to copy to Till {till}. Error: {error_msg}\n")
+
+    target_client.close()
+
+# Step 4: Close source connection
+source_client.close()
+print("🎉 File Transfer Completed for all tills.")
