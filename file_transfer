@@ -1,0 +1,53 @@
+2025-09-09 19:47:27,917 - ERROR - Invalid IP format. Please enter like 10.2.12.12
+2025-09-09 19:47:53,575 - INFO - Generated Tills:
+2025-09-09 19:47:53,577 - INFO - Source Till: 10.13.0.35
+2025-09-09 19:47:53,578 - INFO - Target Tills: ['10.13.0.35', '10.13.0.36', '10.13.0.37', '10.13.0.38']
+2025-09-09 19:47:53,579 - INFO - Starting File Transfer Automation...
+2025-09-09 19:47:53,580 - INFO - Connecting to Till 1 (10.13.0.35)...
+2025-09-09 19:47:53,629 - INFO - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-09 19:47:53,743 - INFO - Authentication (password) successful!
+2025-09-09 19:47:53,743 - INFO - Connected to Till 1.
+2025-09-09 19:47:53,744 - INFO - Uploading local folder C:\Source\ETPStoreFrontV5.5 to /home/posuser/ETPStoreFrontV5.5 on Till 1...
+2025-09-09 19:47:54,048 - INFO - [chan 0] Opened sftp connection (server version 3)
+2025-09-09 19:47:54,099 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\closedwatermark_1024.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/closedwatermark_1024.png
+2025-09-09 19:47:54,116 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\closedwatermark_1024_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/closedwatermark_1024_Dark_Theme.png
+2025-09-09 19:47:54,139 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\closedwatermark_1360.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/closedwatermark_1360.png
+2025-09-09 19:47:54,165 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\closedwatermark_1360_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/closedwatermark_1360_Dark_Theme.png
+2025-09-09 19:47:54,181 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\logo.jpg to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/logo.jpg
+2025-09-09 19:47:54,203 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\logo1.JPG to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/logo1.JPG
+2025-09-09 19:47:54,224 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_1024.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_1024.png
+2025-09-09 19:47:54,262 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_1024_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_1024_Dark_Theme.png
+2025-09-09 19:47:54,282 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_1360.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_1360.png
+2025-09-09 19:47:54,304 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_1360_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_1360_Dark_Theme.png
+2025-09-09 19:47:54,332 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_default.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_default.png
+2025-09-09 19:47:54,360 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\V1\openedwatermark_default_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/V1/openedwatermark_default_Dark_Theme.png
+2025-09-09 19:47:54,398 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\closedwatermark_1024.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/closedwatermark_1024.png
+2025-09-09 19:47:54,429 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\closedwatermark_1024_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/closedwatermark_1024_Dark_Theme.png
+2025-09-09 19:47:54,445 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\closedwatermark_1360.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/closedwatermark_1360.png
+2025-09-09 19:47:54,472 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\closedwatermark_1360_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/closedwatermark_1360_Dark_Theme.png
+2025-09-09 19:47:54,500 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_1024.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_1024.png
+2025-09-09 19:47:54,550 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_1024_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_1024_Dark_Theme.png
+2025-09-09 19:47:54,602 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_1360.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_1360.png
+2025-09-09 19:47:54,636 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_1360_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_1360_Dark_Theme.png
+2025-09-09 19:47:54,674 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_default.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_default.png
+2025-09-09 19:47:54,708 - INFO - Uploaded file: C:\Source\ETPStoreFrontV5.5\resources\images\VIV\openedwatermark_default_Dark_Theme.png to /home/posuser/ETPStoreFrontV5.5/resources/images/VIV/openedwatermark_default_Dark_Theme.png
+2025-09-09 19:47:54,712 - INFO - [chan 0] sftp session closed.
+2025-09-09 19:47:54,714 - INFO - Upload to Till 1 completed.
+2025-09-09 19:47:54,715 - INFO - Checking if source folder exists: /home/posuser/ETPStoreFrontV5.5
+2025-09-09 19:47:54,732 - INFO - Source folder found on Till 1.
+2025-09-09 19:47:54,733 - INFO - Processing Till 10.13.0.35 ...
+2025-09-09 19:47:54,734 - INFO - Trying to connect to 10.13.0.35 (3 sec timeout)...
+2025-09-09 19:47:54,759 - INFO - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-09 19:47:54,868 - INFO - Authentication (password) successful!
+2025-09-09 19:47:54,869 - INFO - Till 10.13.0.35 is reachable.
+2025-09-09 19:47:54,870 - INFO - Executing: scp -r /home/posuser/ETPStoreFrontV5.5 posuser@10.13.0.35:/home/posuser/ETPSuite
+2025-09-09 19:47:55,315 - INFO - Successfully copied folder to Till 10.13.0.35
+2025-09-09 19:47:55,318 - INFO - Processing Till 10.13.0.36 ...
+2025-09-09 19:47:55,319 - INFO - Trying to connect to 10.13.0.36 (3 sec timeout)...
+2025-09-09 19:47:58,332 - ERROR - Till 10.13.0.36 not in network. Skipping.
+2025-09-09 19:47:58,333 - INFO - Processing Till 10.13.0.37 ...
+2025-09-09 19:47:58,334 - INFO - Trying to connect to 10.13.0.37 (3 sec timeout)...
+2025-09-09 19:47:58,358 - INFO - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-09 19:47:58,467 - INFO - Authentication (password) successful!
+2025-09-09 19:47:58,469 - INFO - Till 10.13.0.37 is reachable.
+2025-09-09 19:47:58,471 - INFO - Executing: scp -r /home/posuser/ETPStoreFrontV5.5 posuser@10.13.0.37:/home/posuser/ETPSuite
