@@ -1,0 +1,173 @@
+import paramiko
+import socket
+import time
+import os
+import logging  # Added for logging
+
+# ==== CONFIG ====
+USERNAME = "posuser"
+PASSWORD = "till@123"
+
+SOURCE_FOLDER = "/home/posuser/ETPStoreFrontV5.5"  # Remote path on source till where we upload
+DEST_FOLDER = "/home/posuser/ETPSuite"  # Destination on all tills (including source)
+
+LOCAL_FOLDER = r"C:\Source\ETPStoreFrontV5.5"  # Local Windows path; use r'' for raw string to handle backslashes
+# Alternatively, make it dynamic: LOCAL_FOLDER = input("Enter local folder path (e.g., C:\\Source\\ETPStoreFrontV5.5): ").strip()
+
+LOG_FILE = "file_transfer.log"  # Log file name
+
+# Setup logging: Log to file and console
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE),  # Log to file
+        logging.StreamHandler()  # Log to console
+    ]
+)
+
+# Get base IP from user input
+full_ip = input("Enter base IP (e.g. 10.2.12.12): ").strip()
+
+# Split IP and validate
+ip_parts = full_ip.split(".")
+if len(ip_parts) != 4 or not all(part.isdigit() and 0 <= int(part) <= 255 for part in ip_parts):
+    logging.error("Invalid IP format. Please enter like 10.2.12.12")
+    exit()
+
+# Form base IP using first 3 octets
+base_ip = ".".join(ip_parts[:3]) + "."
+
+# Get starting octet from input
+start_octet = int(ip_parts[3])
+
+# Get number of tills from user input
+num_tills = int(input("Enter number of tills: ").strip())
+
+# Generate list of IPs from starting octet
+ALL_TILLS = [f"{base_ip}{start_octet + i}" for i in range(num_tills)]
+
+# First is source, all (including source) are targets
+SOURCE_TILL = ALL_TILLS[0]
+TARGET_TILLS = ALL_TILLS[0:]  # Includes source till
+
+# Log the generated tills
+logging.info("Generated Tills:")
+logging.info(f"Source Till: {SOURCE_TILL}")
+logging.info(f"Target Tills: {TARGET_TILLS}")
+
+# ==== FUNCTION TO CONNECT WITH TIMEOUT ====
+def ssh_connect(ip, timeout=10):
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(ip, username=USERNAME, password=PASSWORD, timeout=timeout)
+        return client
+    except (paramiko.AuthenticationException, paramiko.SSHException, socket.error, socket.timeout):
+        return None
+
+# ==== FUNCTION TO UPLOAD DIRECTORY RECURSIVELY VIA SFTP ====
+def upload_directory(sftp, local_dir, remote_dir):
+    try:
+        # Create remote dir if it doesn't exist
+        try:
+            sftp.stat(remote_dir)
+        except FileNotFoundError:
+            sftp.mkdir(remote_dir)
+        
+        for item in os.listdir(local_dir):
+            local_path = os.path.join(local_dir, item)
+            remote_path = remote_dir + '/' + item  # Use '/' for remote paths
+            if os.path.isdir(local_path):
+                upload_directory(sftp, local_path, remote_path)
+            else:
+                sftp.put(local_path, remote_path)
+                logging.info(f"Uploaded file: {local_path} to {remote_path}")
+    except Exception as e:
+        raise Exception(f"Upload failed: {str(e)}")
+
+# ==== MAIN SCRIPT ====
+logging.info("Starting File Transfer Automation...")
+
+# Step 1: Connect to Till 1 (source)
+logging.info(f"Connecting to Till 1 ({SOURCE_TILL})...")
+source_client = ssh_connect(SOURCE_TILL)
+if not source_client:
+    logging.error(f"Could not connect to Till 1 ({SOURCE_TILL}). Exiting.")
+    exit()
+
+logging.info("Connected to Till 1.")
+
+# Step 1.5: Upload local folder to source till via SFTP
+logging.info(f"Uploading local folder {LOCAL_FOLDER} to {SOURCE_FOLDER} on Till 1...")
+try:
+    sftp = source_client.open_sftp()
+    upload_directory(sftp, LOCAL_FOLDER, SOURCE_FOLDER)
+    sftp.close()
+    logging.info("Upload to Till 1 completed.")
+except Exception as e:
+    logging.error(f"Upload failed: {str(e)}. Exiting.")
+    source_client.close()
+    exit()
+
+# Display minimal output for upload
+print("File copied from source to till 1")
+
+# Step 2: Check if source folder exists on Till 1
+logging.info(f"Checking if source folder exists: {SOURCE_FOLDER}")
+stdin, stdout, stderr = source_client.exec_command(f"ls {SOURCE_FOLDER}")
+if "No such file" in stderr.read().decode():
+    logging.error(f"Source folder {SOURCE_FOLDER} not found on Till 1.")
+    source_client.close()
+    exit()
+else:
+    logging.info("Source folder found on Till 1.")
+
+# Step 3: Transfer to each target till (including source)
+failed_tills = []  # List to collect failed IPs
+
+for till in TARGET_TILLS:
+    logging.info(f"Processing Till {till} ...")
+
+    # Check if till is reachable
+    logging.info(f"Trying to connect to {till} (3 sec timeout)...")
+    target_client = ssh_connect(till, timeout=3)
+
+    if not target_client:
+        logging.error(f"Till {till} not in network. Skipping.")
+        failed_tills.append(till)
+        continue
+    logging.info(f"Till {till} is reachable.")
+
+    # Run scp from Till 1 to this target till
+    scp_cmd = f"scp -r {SOURCE_FOLDER} {USERNAME}@{till}:{DEST_FOLDER}"
+    logging.info(f"Executing: {scp_cmd}")
+    stdin, stdout, stderr = source_client.exec_command(scp_cmd, get_pty=True)
+
+    # Provide password for scp authentication
+    stdin.write(PASSWORD + "\n")
+    stdin.flush()
+
+    # Wait for completion
+    exit_status = stdout.channel.recv_exit_status()
+    if exit_status == 0:
+        logging.info(f"Successfully copied folder to Till {till}")
+    else:
+        error_msg = stderr.read().decode()
+        logging.error(f"Failed to copy to Till {till}. Error: {error_msg}")
+        failed_tills.append(till)
+
+    target_client.close()
+
+# Step 4: Close source connection
+source_client.close()
+logging.info("File Transfer Completed for all tills.")
+
+# Display minimal output for distribution
+print("File transfer done from till 1 to all other tills")
+
+# Display combined failed IPs
+if failed_tills:
+    print("Failed to transfer to the following IPs:", ", ".join(failed_tills))
+else:
+    print("All transfers successful.")
