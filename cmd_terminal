@@ -1,20 +1,31 @@
+PS D:\VS2> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe d:/VS2/Scripttest_V2.py
+Enter base IP (e.g. 10.2.12.12): 10.13.0.35 
+Enter number of tills: 3
 
-C:\Users\FBSSL50001237>ssh posuser@10.13.0.37
-posuser@10.13.0.37's password:
-Welcome to Ubuntu 18.04.6 LTS (GNU/Linux 5.4.0-150-generic x86_64)
+✅ Generated Tills:
+Source Till: 10.13.0.35
+Target Tills: ['10.13.0.35', '10.13.0.36', '10.13.0.37']
 
- * Documentation:  https://help.ubuntu.com
- * Management:     https://landscape.canonical.com
- * Support:        https://ubuntu.com/advantage
+🚀 Starting File Transfer Automation...
 
-27 updates can be applied immediately.
-1 of these updates is a standard security update.
-To see these additional updates run: apt list --upgradable
+🔐 Connecting to Till 1 (10.13.0.35)...
+✅ Connected to Till 1.
+📂 Checking if source folder exists: /home/posuser/ETPStoreFrontV5.5
+✅ Source folder found on Till 1.
 
-Your Hardware Enablement Stack (HWE) is supported until April 2023.
-Last login: Tue Sep  9 17:39:07 2025 from 10.2.194.211
--bash: /home/posuser/.bashrc: line 121: unexpected EOF while looking for matching `"'
--bash: /home/posuser/.bashrc: line 127: syntax error: unexpected end of file
-posuser@THPL-POS-UAT:~$ cd ETPSuite
-posuser@THPL-POS-UAT:~/ETPSuite$
+➡️ Processing Till 10.13.0.35 ...
+🔌 Trying to connect to 10.13.0.35 (3 sec timeout)...
+✅ Till 10.13.0.35 is reachable.
+📤 Executing: scp -r /home/posuser/ETPStoreFrontV5.5 posuser@10.13.0.35:/home/posuser/ETPSuite
+✅ Successfully copied folder to Till 10.13.0.35
+
+➡️ Processing Till 10.13.0.36 ...
+🔌 Trying to connect to 10.13.0.36 (3 sec timeout)...
+❌ Till 10.13.0.36 not in network. Skipping.
+
+➡️ Processing Till 10.13.0.37 ...
+🔌 Trying to connect to 10.13.0.37 (3 sec timeout)...
+✅ Till 10.13.0.37 is reachable.
+📤 Executing: scp -r /home/posuser/ETPStoreFrontV5.5 posuser@10.13.0.37:/home/posuser/ETPSuite
+
 
