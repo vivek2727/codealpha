@@ -27,3 +27,71 @@ Error: ssh: connect to host 10.13.0.38 port 22: No route to host
 2025-09-13 19:46:11,538 [INFO] - 
 ========================= FINAL SUMMARY =========================
 2025-09-13 19:46:11,541 [INFO] -  All stores were processed successfully!
+
+
+PS D:\VS\smart deployer> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe "d:/VS/smart deployer/smart_deployer.py"
+2025-09-13 22:39:43,371 [INFO] - 
+==================== PROCESSING STORE: 10.13.0.35 ====================
+2025-09-13 22:39:43,372 [INFO] - Starting deployment for store 10.13.0.35...
+2025-09-13 22:39:43,416 [INFO] - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-13 22:39:43,558 [INFO] - Authentication (password) successful!
+2025-09-13 22:39:44,550 [WARNING] - Passwordless SSH not configured. Running setup...
+2025-09-13 22:39:44,551 [INFO] - Performing one-time key setup for store 10.13.0.35...
+2025-09-13 22:39:44,581 [INFO] - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-13 22:39:44,709 [INFO] - Authentication (password) successful!
+
+
+
+
+
+
+
+
+
+PS D:\VS\smart deployer> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe "d:/VS/smart deployer/smart_deployer.py"
+2025-09-13 22:39:43,371 [INFO] - 
+==================== PROCESSING STORE: 10.13.0.35 ====================
+2025-09-13 22:39:43,372 [INFO] - Starting deployment for store 10.13.0.35...
+2025-09-13 22:39:43,416 [INFO] - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-13 22:39:43,558 [INFO] - Authentication (password) successful!
+2025-09-13 22:39:44,550 [WARNING] - Passwordless SSH not configured. Running setup...
+2025-09-13 22:39:44,551 [INFO] - Performing one-time key setup for store 10.13.0.35...
+2025-09-13 22:39:44,581 [INFO] - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-13 22:39:44,709 [INFO] - Authentication (password) successful!
+
+
+
+
+
+
+
+
+
+PS D:\VS\smart deployer> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe "d:/VS/smart deployer/smart_deployer.py"
+2025-09-13 22:39:43,371 [INFO] - 
+==================== PROCESSING STORE: 10.13.0.35 ====================
+2025-09-13 22:39:43,372 [INFO] - Starting deployment for store 10.13.0.35...
+2025-09-13 22:39:43,416 [INFO] - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-13 22:39:43,558 [INFO] - Authentication (password) successful!
+2025-09-13 22:39:44,550 [WARNING] - Passwordless SSH not configured. Running setup...
+2025-09-13 22:39:44,551 [INFO] - Performing one-time key setup for store 10.13.0.35...
+2025-09-13 22:39:44,581 [INFO] - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-13 22:39:44,709 [INFO] - Authentication (password) successful!
+
+
+
+
+
+
+
+
+2025-09-13 22:39:43,371 [INFO] - 
+==================== PROCESSING STORE: 10.13.0.35 ====================
+2025-09-13 22:39:43,372 [INFO] - Starting deployment for store 10.13.0.35...
+2025-09-13 22:39:43,416 [INFO] - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-13 22:39:43,558 [INFO] - Authentication (password) successful!
+2025-09-13 22:39:44,550 [WARNING] - Passwordless SSH not configured. Running setup...
+2025-09-13 22:39:44,551 [INFO] - Performing one-time key setup for store 10.13.0.35...
+2025-09-13 22:39:44,581 [INFO] - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-09-13 22:39:44,709 [INFO] - Authentication (password) successful!
+
