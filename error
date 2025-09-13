@@ -1,0 +1,66 @@
+PS D:\VS\smart deployer> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe "d:/VS/smart deployer/smart_deployer.py"
+2025-09-13 18:56:28,311 [INFO] - 
+==================== PROCESSING STORE: 10.13.0.35 ====================
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f69a' in position 33: character maps to <undefined>
+Call stack:
+  File "d:\VS\smart deployer\smart_deployer.py", line 154, in <module>
+    if not deploy_to_store(current_store_tills):
+  File "d:\VS\smart deployer\smart_deployer.py", line 83, in deploy_to_store
+    logging.info(f"🚚 Starting deployment for store {source_till_ip}...")
+Message: '🚚 Starting deployment for store 10.13.0.35...'
+Arguments: ()
+2025-09-13 18:56:28,328 [INFO] - 🚚 Starting deployment for store 10.13.0.35...
+--- Logging error ---
+Traceback (most recent call last):
+  File "d:\VS\smart deployer\smart_deployer.py", line 26, in ssh_connect
+    client.connect(ip, username=USERNAME, password=PASSWORD, timeout=10)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\site-packages\paramiko\client.py", line 386, in connect
+    sock.connect(addr)
+    ~~~~~~~~~~~~^^^^^^
+TimeoutError: timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\logging\__init__.py", line 1153, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 34: character maps to <undefined>
+    if not deploy_to_store(current_store_tills):
+  File "d:\VS\smart deployer\smart_deployer.py", line 86, in deploy_to_store
+    source_client_check = ssh_connect(source_till_ip)
+  File "d:\VS\smart deployer\smart_deployer.py", line 29, in ssh_connect
+    logging.error(f"❌ Failed to connect to {ip}: {e}")
+Message: '❌ Failed to connect to 10.13.0.35: timed out'
+Arguments: ()
+2025-09-13 18:56:38,986 [ERROR] - ❌ Failed to connect to 10.13.0.35: timed out
+2025-09-13 18:56:39,131 [INFO] -
+========================= FINAL SUMMARY =========================
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\logging\__init__.py", line 1153, in emit       
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode       
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 36-37: character maps to <undefined>
+Call stack:
+  File "d:\VS\smart deployer\smart_deployer.py", line 161, in <module>
+    logging.warning(f"⚠️ Deployment failed for the following stores: {', '.join(failed_stores)}")
+Message: '⚠️ Deployment failed for the following stores: 10.13.0.35'
+Arguments: ()
+2025-09-13 18:56:39,151 [WARNING] - ⚠️ Deployment failed for the following stores: 10.13.0.35
+PS D:\VS\smart deployer>
