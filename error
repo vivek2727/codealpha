@@ -1,16 +1,27 @@
-==================== PROCESSING STORE: 10.13.0.35 ====================
-2025-09-13 23:01:24,809 [INFO] - Starting deployment for store 10.13.0.35...
-2025-09-13 23:01:25,334 [INFO] - Connected (version 2.0, client OpenSSH_7.6p1)
-2025-09-13 23:01:25,708 [INFO] - Authentication (password) successful!
-2025-09-13 23:01:26,176 [WARNING] - Passwordless SSH not configured. Running setup...
-2025-09-13 23:01:26,177 [INFO] - Performing one-time key setup for store 10.13.0.35...
-2025-09-13 23:01:26,208 [INFO] - Connected (version 2.0, client OpenSSH_7.6p1)
-2025-09-13 23:01:26,336 [INFO] - Authentication (password) successful!
-2025-09-13 23:01:26,337 [INFO] -   -> Removing any old SSH keys to ensure a clean setup...
-2025-09-13 23:01:28,900 [ERROR] - Could not generate or read public key. Setup failed.
-2025-09-13 23:01:28,900 [INFO] - 
-========================= CREATING REPORT =========================
-2025-09-13 23:01:29,335 [INFO] - Successfully created report: deployment_report_2025-09-13_23-01-28.xlsx
-2025-09-13 23:01:29,336 [INFO] - 
-========================= FINAL SUMMARY =========================
-2025-09-13 23:01:29,336 [WARNING] - Deployment had failures in the following stores: 10.13.0.35
+Microsoft Windows [Version 10.0.26100.4946]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\FBSSL50001237>ssh posuser@10.13.0.35
+posuser@10.13.0.35's password:
+Welcome to Ubuntu 18.04.6 LTS (GNU/Linux 5.4.0-137-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+0 updates can be applied immediately.
+
+Your Hardware Enablement Stack (HWE) is supported until April 2023.
+Last login: Thu Sep 11 14:35:30 2025 from 10.2.194.94
+-bash: /home/posuser/.bashrc: line 121: unexpected EOF while looking for matching `"'
+-bash: /home/posuser/.bashrc: line 127: syntax error: unexpected end of file
+posuser@WS-POS-UAT:~$ ls -ld /home/posuser
+drwxr-xr-x 30 posuser posuser 4096 Sep 13 19:45 /home/posuser
+posuser@WS-POS-UAT:~$
+
+
+
+
+
+
+
