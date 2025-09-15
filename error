@@ -22,6 +22,21 @@ posuser@WS-POS-UAT:~$
 
 
 
+Microsoft Windows [Version 10.0.17763.6893]
+(c) 2018 Microsoft Corporation. All rights reserved.
+
+C:\Users\fbssl50001237>ssh posuser@10.2.181.112
+The authenticity of host '10.2.181.112 (10.2.181.112)' can't be established.
+ED25519 key fingerprint is SHA256:J4JhHmvJICKqghkZGkY+QiVz0kA32SU71qmLTM/Ytms.
+This host key is known by the following other names/addresses:
+    C:\Users\fbssl50001237/.ssh/known_hosts:59: 10.0.37.112
+Are you sure you want to continue connecting (yes/no/[fingerprint])?
+
+
+if this type of scenerio wll occur then how will the script handle this 
+and if not added any solution try to add this in code also
+
+
 
 
 
