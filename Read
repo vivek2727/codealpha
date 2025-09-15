@@ -1,15 +1,22 @@
-# ==== CONFIG (Dynamic Target Generation) ====
-base_ip = "10.2.12."   # IP prefix
-USERNAME = "posuser"
-PASSWORD = "till@123"
+PS D:\VS\smart deplyer_2> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe "d:/VS/smart deplyer_2/test_paramiko.py"
+🚀 Starting File Transfer Automation...
 
-SOURCE_FOLDER = "/home/posuser/ETPStoreFrontV55"
-DEST_FOLDER = "/home/posuser/ETPSuite"
+🔐 Connecting to Till 1 (10.13.0.35)...
+✅ Connected to Till 1.
+📂 Checking if source folder exists: /home/posuser/ETPStoreFrontV5.5
+✅ Source folder found on Till 1.
 
-# Ask user for number of tills
-num_tills = int(input("Enter number of tills: ").strip())
+➡️ Processing Till 10.13.0.35 ...
+🔌 Trying to connect to 10.13.0.35 (10 sec timeout)...
+✅ Till 10.13.0.35 is reachable.
+📤 Executing: scp -r /home/posuser/ETPStoreFrontV5.5 posuser@10.13.0.35:/home/posuser/ETPSuite
+✅ Successfully copied folder to Till 10.13.0.35
 
-# Generate IPs dynamically
-ALL_TILLS = [f"{base_ip}{112 + i}" for i in range(num_tills)]
-SOURCE_TILL = ALL_TILLS[0]
-TARGET_TILLS = ALL_TILLS[1:]   # all except the first
+➡️ Processing Till 10.13.0.75 ...
+🔌 Trying to connect to 10.13.0.75 (10 sec timeout)...
+❌ Till 10.13.0.75 not in network. Skipping.
+
+➡️ Processing Till 10.13.0.87 ...
+🔌 Trying to connect to 10.13.0.87 (10 sec timeout)...
+✅ Till 10.13.0.87 is reachable.
+📤 Executing: scp -r /home/posuser/ETPStoreFrontV5.5 posuser@10.13.0.87:/home/posuser/ETPSuite
