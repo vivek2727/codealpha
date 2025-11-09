@@ -198,6 +198,9 @@ def main():
                 logger.warning(f"Till{till_num} ({till_ip}) is not in network")
                 continue
 
+            # Set timeout on transport socket before creating SFTP
+            till_transport.sock.settimeout(TIMEOUT_TRANSFER)
+
             sftp_till = paramiko.SFTPClient.from_transport(till_transport)
             transfer_success = False
             try:
@@ -213,8 +216,7 @@ def main():
                 except Exception as e:
                     raise Exception(f"Cannot access ETPSuite: {str(e)}")
 
-                # Copy contents (set timeout for operations)
-                sftp_till.transport.sock.settimeout(TIMEOUT_TRANSFER)
+                # Copy contents
                 copy_dir_between_sfpts(sftp_host, sftp_till, HOST_DEST, TILL_DEST_BASE)
                 logger.info(f"Transfer completed successfully for Till{till_num}")
                 transfer_success = True
