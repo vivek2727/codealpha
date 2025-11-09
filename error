@@ -1,0 +1,4 @@
+2025-11-09 20:08:33,714 - INFO - Starting deployment script
+2025-11-09 20:08:33,714 - INFO - Step 1: Copying ETPStoreFrontV5.5 from local to host
+2025-11-09 20:08:33,745 - ERROR - Failed to connect to 10.13.0.23 as linuxadmin: Transport.connect() got an unexpected keyword argument 'timeout'
+2025-11-09 20:08:33,745 - ERROR - Failed to connect to host. Aborting.
