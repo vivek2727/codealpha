@@ -31,24 +31,70 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def connect_transport(host, username, password, timeout):
+def is_port_reachable(host, port, timeout):
+    """Check if the host's port is reachable within timeout."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
+    try:
+        result = sock.connect_ex((host, port))
+        sock.close()
+        if result == 0:
+            logger.debug(f"Port {port} on {host} is reachable")
+            return True
+        else:
+            logger.warning(f"Port {port} on {host} is not reachable (error code: {result})")
+            return False
+    except socket.timeout:
+        logger.error(f"Timeout while checking port {port} on {host}")
+        return False
+    except Exception as e:
+        logger.error(f"Error checking port {port} on {host}: {str(e)}")
+        return False
+
+def connect_transport(host, username, password, timeout, port=22):
     """Connect to SSH transport with timeout."""
+    logger.info(f"Attempting to connect to {host}:{port} as {username} (timeout: {timeout}s)")
+    
+    # Pre-check port reachability
+    if not is_port_reachable(host, port, timeout):
+        logger.error(f"Cannot reach {host} on port {port}. Check network, firewall, or SSH service.")
+        return None
+    
+    sock = None
+    transport = None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
+        logger.debug("TCP connect initiated...")
+        sock.connect((host, port))
+        logger.debug("TCP connect successful. Starting SSH handshake...")
+        
         transport = paramiko.Transport(sock)
-        transport.connect(username=username, password=password)
-        transport.set_keepalive(30)  # Keep connection alive
-        logger.debug(f"Successfully connected to {host} as {username}")
+        transport.banner_timeout = timeout
+        transport.packetizer.REKEY_BYTES = 5000000  # Reduce rekey to avoid long waits
+        transport.start_client(timeout=timeout)
+        
+        logger.debug("SSH handshake started. Authenticating...")
+        transport.auth_password(username, password)
+        transport.set_keepalive(30)
+        logger.info(f"Successfully connected and authenticated to {host} as {username}")
         return transport
+        
+    except paramiko.AuthenticationException:
+        logger.error(f"Authentication failed for {username}@{host}. Check username/password.")
+        return None
+    except paramiko.SSHException as e:
+        logger.error(f"SSH error connecting to {host}: {str(e)}")
+        return None
     except socket.timeout:
-        logger.error(f"Connection to {host} timed out after {timeout} seconds")
+        logger.error(f"Timeout during connection/handshake to {host} after {timeout}s")
         return None
     except Exception as e:
-        logger.error(f"Failed to connect to {host} as {username}: {str(e)}")
-        if 'transport' in locals():
-            transport.close()
+        logger.error(f"Unexpected error connecting to {host} as {username}: {str(e)}")
         return None
+    finally:
+        if sock and not transport:
+            sock.close()
 
 def upload_folder(sftp, local_dir, remote_dir):
     """Recursively upload local folder contents to remote directory."""
@@ -57,8 +103,9 @@ def upload_folder(sftp, local_dir, remote_dir):
 
     try:
         sftp.mkdir(remote_dir)
+        logger.info(f"Created remote directory: {remote_dir}")
     except IOError:
-        pass  # Directory already exists
+        logger.debug(f"Remote directory already exists: {remote_dir}")
 
     for item in os.listdir(local_dir):
         local_item = os.path.join(local_dir, item)
@@ -83,8 +130,10 @@ def copy_dir_between_sfpts(sftp_src, sftp_dest, src_dir, dst_dir):
 
     try:
         sftp_dest.stat(dst_dir)
+        logger.debug(f"Destination {dst_dir} exists")
     except FileNotFoundError:
         sftp_dest.mkdir(dst_dir)
+        logger.info(f"Created destination directory: {dst_dir}")
     except Exception as e:
         logger.error(f"Cannot access/create destination {dst_dir}: {str(e)}")
         return
@@ -133,9 +182,12 @@ def main():
     finally:
         sftp_host.close()
 
+    # Keep host connection open for Step 2
+    host_transport.set_keepalive(30)
+
     # Step 2: Distribute from host to tills (contents of HOST_DEST to TILL_DEST_BASE on each till)
     logger.info("Step 2: Distributing from host to tills")
-    sftp_host = paramiko.SFTPClient.from_transport(host_transport)  # Re-open for distribution
+    sftp_host = paramiko.SFTPClient.from_transport(host_transport)
     try:
         for till_num in range(1, MAX_TILL + 1):
             till_ip = f"10.13.0.{34 + till_num}"
@@ -161,8 +213,8 @@ def main():
                 except Exception as e:
                     raise Exception(f"Cannot access ETPSuite: {str(e)}")
 
-                # Copy contents (with 6s timeout approximation via transport)
-                till_transport.sock.settimeout(TIMEOUT_TRANSFER)
+                # Copy contents (set timeout for operations)
+                sftp_till.transport.sock.settimeout(TIMEOUT_TRANSFER)
                 copy_dir_between_sfpts(sftp_host, sftp_till, HOST_DEST, TILL_DEST_BASE)
                 logger.info(f"Transfer completed successfully for Till{till_num}")
                 transfer_success = True
