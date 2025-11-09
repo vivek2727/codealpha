@@ -2,6 +2,7 @@ import os
 import logging
 import shutil
 import paramiko
+import socket
 from stat import S_ISDIR
 from datetime import datetime
 
@@ -9,7 +10,7 @@ from datetime import datetime
 SOURCE_FOLDER = r'C:\Source\ETPStoreFrontV5.5'
 HOST_IP = '10.13.0.23'
 HOST_USER = 'linuxadmin'
-HOST_PASS = 'St0re@dm1n'  # Note: If it's 'St0re@dm1!', update here
+HOST_PASS = 'St0re@dm1n'  # Confirmed as per your message
 HOST_DEST = '/home/linuxadmin/ETPStoreFrontV5.5'
 TILL_USER = 'posuser'
 TILL_PASS = 'till@123'
@@ -32,14 +33,20 @@ logger = logging.getLogger(__name__)
 
 def connect_transport(host, username, password, timeout):
     """Connect to SSH transport with timeout."""
-    transport = paramiko.Transport((host, 22))
     try:
-        transport.connect(username=username, password=password, timeout=timeout)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        transport = paramiko.Transport(sock)
+        transport.connect(username=username, password=password)
         transport.set_keepalive(30)  # Keep connection alive
+        logger.debug(f"Successfully connected to {host} as {username}")
         return transport
+    except socket.timeout:
+        logger.error(f"Connection to {host} timed out after {timeout} seconds")
+        return None
     except Exception as e:
         logger.error(f"Failed to connect to {host} as {username}: {str(e)}")
-        if transport:
+        if 'transport' in locals():
             transport.close()
         return None
 
@@ -155,7 +162,7 @@ def main():
                     raise Exception(f"Cannot access ETPSuite: {str(e)}")
 
                 # Copy contents (with 6s timeout approximation via transport)
-                till_transport.set_timeout(TIMEOUT_TRANSFER)
+                till_transport.sock.settimeout(TIMEOUT_TRANSFER)
                 copy_dir_between_sfpts(sftp_host, sftp_till, HOST_DEST, TILL_DEST_BASE)
                 logger.info(f"Transfer completed successfully for Till{till_num}")
                 transfer_success = True
