@@ -1,48 +1,118 @@
-2025-11-09 20:38:09,508 - INFO - Starting deployment script
-2025-11-09 20:38:09,509 - INFO - Step 1: Copying ETPStoreFrontV5.5 from local to host
-2025-11-09 20:38:09,509 - INFO - Attempting to connect to 10.13.0.23:22 as linuxadmin (timeout: 3s)
-2025-11-09 20:38:09,548 - INFO - Connected (version 2.0, client OpenSSH_8.9p1)
-2025-11-09 20:38:09,641 - INFO - Authentication (password) successful!
-2025-11-09 20:38:09,642 - INFO - Successfully connected and authenticated to 10.13.0.23 as linuxadmin
-2025-11-09 20:38:10,087 - INFO - [chan 0] Opened sftp connection (server version 3)
-2025-11-09 20:38:10,090 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5
-2025-11-09 20:38:10,093 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources
-2025-11-09 20:38:10,121 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources/images
-2025-11-09 20:38:10,126 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources/images/V1
-2025-11-09 20:38:10,158 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources/images/VIV
-2025-11-09 20:38:10,187 - INFO - Step 1 completed: Folder uploaded to host successfully
-2025-11-09 20:38:10,187 - INFO - [chan 0] sftp session closed.
-2025-11-09 20:38:10,188 - INFO - Step 2: Distributing from host to tills
-2025-11-09 20:38:10,212 - INFO - [chan 1] Opened sftp connection (server version 3)
-2025-11-09 20:38:10,213 - INFO - Processing Till1 (10.13.0.35)
-2025-11-09 20:38:10,213 - INFO - Attempting to connect to 10.13.0.35:22 as posuser (timeout: 3s)
-2025-11-09 20:38:10,237 - INFO - Connected (version 2.0, client OpenSSH_7.6p1)
-2025-11-09 20:38:10,333 - INFO - Authentication (password) successful!
-2025-11-09 20:38:10,333 - INFO - Successfully connected and authenticated to 10.13.0.35 as posuser
-2025-11-09 20:38:10,657 - INFO - [chan 0] Opened sftp connection (server version 3)
-2025-11-09 20:38:10,661 - INFO - ETPSuite exists on Till1
-2025-11-09 20:38:10,694 - INFO - Created destination directory: /home/posuser/ETPSuite/resources
-2025-11-09 20:38:10,713 - INFO - Created destination directory: /home/posuser/ETPSuite/resources/images
-2025-11-09 20:38:10,738 - INFO - Created destination directory: /home/posuser/ETPSuite/resources/images/VIV
-2025-11-09 20:38:10,840 - INFO - Created destination directory: /home/posuser/ETPSuite/resources/images/V1
-2025-11-09 20:38:10,893 - INFO - Transfer completed successfully for Till1
-2025-11-09 20:38:10,893 - INFO - [chan 0] sftp session closed.
-2025-11-09 20:38:10,894 - INFO - Processing Till2 (10.13.0.36)
-2025-11-09 20:38:10,895 - INFO - Attempting to connect to 10.13.0.36:22 as posuser (timeout: 3s)
-2025-11-09 20:38:13,909 - WARNING - Port 22 on 10.13.0.36 is not reachable (error code: 10035)
-2025-11-09 20:38:13,910 - ERROR - Cannot reach 10.13.0.36 on port 22. Check network, firewall, or SSH service.
-2025-11-09 20:38:13,910 - WARNING - Till2 (10.13.0.36) is not in network
-2025-11-09 20:38:13,910 - INFO - Processing Till3 (10.13.0.37)
-2025-11-09 20:38:13,911 - INFO - Attempting to connect to 10.13.0.37:22 as posuser (timeout: 3s)
-2025-11-09 20:38:13,946 - INFO - Connected (version 2.0, client OpenSSH_7.6p1)
-2025-11-09 20:38:14,046 - INFO - Authentication (password) successful!
-2025-11-09 20:38:14,047 - INFO - Successfully connected and authenticated to 10.13.0.37 as posuser
-2025-11-09 20:38:14,471 - INFO - [chan 0] Opened sftp connection (server version 3)
-2025-11-09 20:38:14,475 - INFO - ETPSuite exists on Till3
-2025-11-09 20:38:14,536 - INFO - Created destination directory: /home/posuser/ETPSuite/resources/images/VIV
-2025-11-09 20:38:14,614 - INFO - Created destination directory: /home/posuser/ETPSuite/resources/images/V1
-2025-11-09 20:38:14,659 - INFO - Transfer completed successfully for Till3
-2025-11-09 20:38:14,659 - INFO - [chan 0] sftp session closed.
-2025-11-09 20:38:14,660 - INFO - Processing Till4 (10.13.0.38)
-2025-11-09 20:38:14,661 - INFO - Attempting to connect to 10.13.0.38:22 as posuser (timeout: 3s)
-2025-11-09 20:38:17,665 - WARNING - Port 22 on 10.13.0.38 is not reachable (error code: 10035)
+PS D:\VS\Deploy_new> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe d:/VS/Deploy_new/deploy_etp3.py
+2025-11-17 10:38:55,780 - INFO - Starting multi-host deployment script
+Enter path to config Excel file (or press Enter for 'deployment_config.xlsx'): 
+2025-11-17 10:38:57,702 - INFO - Processing host 10.0.70.12 with 4 tills
+2025-11-17 10:38:57,702 - INFO - Step 1: Copying ETPStoreFrontV5.5 from local to host 10.0.70.12
+2025-11-17 10:38:57,703 - INFO - Attempting to connect to 10.0.70.12:22 as linuxadmin (timeout: 3s)
+2025-11-17 10:38:57,821 - INFO - Connected (version 2.0, client OpenSSH_8.9p1)
+2025-11-17 10:38:58,030 - INFO - Auth banner: b'===========================================================================\nPROPRIETARY INFORMATION\nAll content of this system and its associated sub-systems are PROPRIETARY\nINFORMATION and remain the sole and exclusive property of M/s Trent Ltd.\nThis system may be accessed and used by authorized personnel only.\nAuthorized users may only perform authorized activities and may not exceed\nthe limits of such authorization. Disclosure of information found in this\nsystem for any unauthorized use is *STRICTLY PROHIBITED*. All activities on\ncan result in disciplinary action or criminal prosecution.\n===========================================================================\n===========================================================================\n\n\n        \n'
+2025-11-17 10:38:58,182 - INFO - Authentication (password) successful!
+2025-11-17 10:38:58,183 - INFO - Successfully connected and authenticated to 10.0.70.12 as linuxadmin
+2025-11-17 10:38:58,511 - INFO - [chan 0] Opened sftp connection (server version 3)
+2025-11-17 10:38:58,545 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5
+2025-11-17 10:38:58,769 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources
+2025-11-17 10:38:58,794 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources/images
+2025-11-17 10:38:58,833 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources/images/V1
+2025-11-17 10:39:00,145 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources/images/VIV
+2025-11-17 10:39:01,141 - INFO - Step 1 completed: Folder uploaded to host 10.0.70.12 successfully
+2025-11-17 10:39:01,143 - INFO - [chan 0] sftp session closed.
+2025-11-17 10:39:01,144 - INFO - Step 2: Distributing from host 10.0.70.12 to tills
+2025-11-17 10:39:01,246 - INFO - [chan 1] Opened sftp connection (server version 3)
+2025-11-17 10:39:01,246 - INFO - Processing Till1 (10.13.0.35) for host 10.0.70.12
+2025-11-17 10:39:01,247 - INFO - Attempting to connect to 10.13.0.35:22 as posuser (timeout: 3s)
+2025-11-17 10:39:01,310 - INFO - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-11-17 10:39:01,373 - INFO - Authentication (password) successful!
+2025-11-17 10:39:01,373 - INFO - Successfully connected and authenticated to 10.13.0.35 as posuser
+2025-11-17 10:39:01,718 - INFO - [chan 0] Opened sftp connection (server version 3)
+2025-11-17 10:39:01,723 - INFO - Destination exists on Till1
+2025-11-17 10:39:03,087 - INFO - Transfer completed successfully for Till1
+2025-11-17 10:39:03,087 - INFO - [chan 0] sftp session closed.
+2025-11-17 10:39:03,088 - INFO - Status for Till1 (10.13.0.35): Success
+2025-11-17 10:39:03,088 - INFO - Processing Till2 (10.13.0.36) for host 10.0.70.12
+2025-11-17 10:39:03,089 - INFO - Attempting to connect to 10.13.0.36:22 as posuser (timeout: 3s)
+2025-11-17 10:39:06,094 - WARNING - Port 22 on 10.13.0.36 is not reachable (error code: 10035)
+2025-11-17 10:39:06,096 - ERROR - Cannot reach 10.13.0.36 on port 22. Check network, firewall, or SSH service.
+2025-11-17 10:39:06,097 - WARNING - Till2 (10.13.0.36) is not in network
+2025-11-17 10:39:06,098 - INFO - Processing Till3 (10.13.0.37) for host 10.0.70.12
+2025-11-17 10:39:06,099 - INFO - Attempting to connect to 10.13.0.37:22 as posuser (timeout: 3s)
+2025-11-17 10:39:09,096 - WARNING - Port 22 on 10.13.0.37 is not reachable (error code: 10035)
+2025-11-17 10:39:09,097 - ERROR - Cannot reach 10.13.0.37 on port 22. Check network, firewall, or SSH service.
+2025-11-17 10:39:09,099 - WARNING - Till3 (10.13.0.37) is not in network
+2025-11-17 10:39:09,100 - INFO - Processing Till4 (10.13.0.38) for host 10.0.70.12
+2025-11-17 10:39:09,101 - INFO - Attempting to connect to 10.13.0.38:22 as posuser (timeout: 3s)
+2025-11-17 10:39:12,104 - WARNING - Port 22 on 10.13.0.38 is not reachable (error code: 10035)
+2025-11-17 10:39:12,104 - ERROR - Cannot reach 10.13.0.38 on port 22. Check network, firewall, or SSH service.
+2025-11-17 10:39:12,105 - WARNING - Till4 (10.13.0.38) is not in network
+2025-11-17 10:39:12,105 - INFO - [chan 1] sftp session closed.
+2025-11-17 10:39:12,106 - INFO - Host 10.0.70.12 deployment complete: 1/4 tills successful
+2025-11-17 10:39:12,107 - INFO - Processing host 10.0.94.12 with 5 tills
+2025-11-17 10:39:12,107 - INFO - Step 1: Copying ETPStoreFrontV5.5 from local to host 10.0.94.12
+2025-11-17 10:39:12,108 - INFO - Attempting to connect to 10.0.94.12:22 as linuxadmin (timeout: 3s)
+2025-11-17 10:39:12,169 - INFO - Connected (version 2.0, client OpenSSH_8.9p1)
+2025-11-17 10:39:12,325 - INFO - Auth banner: b'===========================================================================\nPROPRIETARY INFORMATION\nAll content of this system and its associated sub-systems are PROPRIETARY\nINFORMATION and remain the sole and exclusive property of M/s Trent Ltd.\nThis system may be accessed and used by authorized personnel only.\nAuthorized users may only perform authorized activities and may not exceed\nthe limits of such authorization. Disclosure of information found in this\nsystem for any unauthorized use is *STRICTLY PROHIBITED*. All activities on\ncan result in disciplinary action or criminal prosecution.\n===========================================================================\n===========================================================================\n\n\n        \n'
+2025-11-17 10:39:12,326 - INFO - Authentication (password) successful!
+2025-11-17 10:39:12,327 - INFO - Successfully connected and authenticated to 10.0.94.12 as linuxadmin
+2025-11-17 10:39:12,786 - INFO - [chan 0] Opened sftp connection (server version 3)
+2025-11-17 10:39:12,811 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5
+2025-11-17 10:39:12,831 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources
+2025-11-17 10:39:12,865 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources/images
+2025-11-17 10:39:12,883 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources/images/V1
+2025-11-17 10:39:13,038 - INFO - Created remote directory: /home/linuxadmin/ETPStoreFrontV5.5/resources/images/VIV
+2025-11-17 10:39:13,267 - INFO - Step 1 completed: Folder uploaded to host 10.0.94.12 successfully
+2025-11-17 10:39:13,267 - INFO - [chan 0] sftp session closed.
+2025-11-17 10:39:13,268 - INFO - Step 2: Distributing from host 10.0.94.12 to tills
+2025-11-17 10:39:13,350 - INFO - [chan 1] Opened sftp connection (server version 3)
+2025-11-17 10:39:13,351 - INFO - Processing Till1 (10.13.0.35) for host 10.0.94.12
+2025-11-17 10:39:13,351 - INFO - Attempting to connect to 10.13.0.35:22 as posuser (timeout: 3s)
+2025-11-17 10:39:13,389 - INFO - Connected (version 2.0, client OpenSSH_7.6p1)
+2025-11-17 10:39:13,455 - INFO - Authentication (password) successful!
+2025-11-17 10:39:13,455 - INFO - Successfully connected and authenticated to 10.13.0.35 as posuser
+2025-11-17 10:39:13,752 - INFO - [chan 0] Opened sftp connection (server version 3)
+2025-11-17 10:39:13,767 - INFO - Destination exists on Till1
+2025-11-17 10:39:15,302 - INFO - Transfer completed successfully for Till1
+2025-11-17 10:39:15,303 - INFO - [chan 0] sftp session closed.
+2025-11-17 10:39:15,305 - INFO - Status for Till1 (10.13.0.35): Success
+2025-11-17 10:39:15,306 - INFO - Processing Till2 (10.13.0.36) for host 10.0.94.12
+2025-11-17 10:39:15,307 - INFO - Attempting to connect to 10.13.0.36:22 as posuser (timeout: 3s)
+2025-11-17 10:39:18,309 - WARNING - Port 22 on 10.13.0.36 is not reachable (error code: 10035)
+2025-11-17 10:39:18,310 - ERROR - Cannot reach 10.13.0.36 on port 22. Check network, firewall, or SSH service.
+2025-11-17 10:39:18,312 - WARNING - Till2 (10.13.0.36) is not in network
+2025-11-17 10:39:18,313 - INFO - Processing Till3 (10.13.0.37) for host 10.0.94.12
+2025-11-17 10:39:18,314 - INFO - Attempting to connect to 10.13.0.37:22 as posuser (timeout: 3s)
+2025-11-17 10:39:21,317 - WARNING - Port 22 on 10.13.0.37 is not reachable (error code: 10035)
+2025-11-17 10:39:21,317 - ERROR - Cannot reach 10.13.0.37 on port 22. Check network, firewall, or SSH service.
+2025-11-17 10:39:21,317 - WARNING - Till3 (10.13.0.37) is not in network
+2025-11-17 10:39:21,318 - INFO - Processing Till4 (10.13.0.38) for host 10.0.94.12
+2025-11-17 10:39:21,318 - INFO - Attempting to connect to 10.13.0.38:22 as posuser (timeout: 3s)
+2025-11-17 10:39:24,327 - WARNING - Port 22 on 10.13.0.38 is not reachable (error code: 10035)
+2025-11-17 10:39:24,327 - ERROR - Cannot reach 10.13.0.38 on port 22. Check network, firewall, or SSH service.
+2025-11-17 10:39:24,328 - WARNING - Till4 (10.13.0.38) is not in network
+2025-11-17 10:39:24,328 - INFO - Processing Till5 (10.13.0.39) for host 10.0.94.12
+2025-11-17 10:39:18,314 - INFO - Attempting to connect to 10.13.0.37:22 as posuser (timeout: 3s)
+2025-11-17 10:39:21,317 - WARNING - Port 22 on 10.13.0.37 is not reachable (error code: 10035)
+2025-11-17 10:39:21,317 - ERROR - Cannot reach 10.13.0.37 on port 22. Check network, firewall, or SSH service.
+2025-11-17 10:39:21,317 - WARNING - Till3 (10.13.0.37) is not in network
+2025-11-17 10:39:21,318 - INFO - Processing Till4 (10.13.0.38) for host 10.0.94.12
+2025-11-17 10:39:21,318 - INFO - Attempting to connect to 10.13.0.38:22 as posuser (timeout: 3s)
+2025-11-17 10:39:24,327 - WARNING - Port 22 on 10.13.0.38 is not reachable (error code: 10035)
+2025-11-17 10:39:24,327 - ERROR - Cannot reach 10.13.0.38 on port 22. Check network, firewall, or SSH service.
+2025-11-17 10:39:24,328 - WARNING - Till4 (10.13.0.38) is not in network
+2025-11-17 10:39:24,328 - INFO - Processing Till5 (10.13.0.39) for host 10.0.94.12
+2025-11-17 10:39:21,318 - INFO - Processing Till4 (10.13.0.38) for host 10.0.94.12
+2025-11-17 10:39:21,318 - INFO - Attempting to connect to 10.13.0.38:22 as posuser (timeout: 3s)
+2025-11-17 10:39:24,327 - WARNING - Port 22 on 10.13.0.38 is not reachable (error code: 10035)
+2025-11-17 10:39:24,327 - ERROR - Cannot reach 10.13.0.38 on port 22. Check network, firewall, or SSH service.
+2025-11-17 10:39:24,328 - WARNING - Till4 (10.13.0.38) is not in network
+2025-11-17 10:39:24,328 - INFO - Processing Till5 (10.13.0.39) for host 10.0.94.12
+2025-11-17 10:39:24,328 - WARNING - Till4 (10.13.0.38) is not in network
+2025-11-17 10:39:24,328 - INFO - Processing Till5 (10.13.0.39) for host 10.0.94.12
+2025-11-17 10:39:24,329 - INFO - Attempting to connect to 10.13.0.39:22 as posuser (timeout: 3s)
+2025-11-17 10:39:27,332 - WARNING - Port 22 on 10.13.0.39 is not reachable (error code: 10035)
+2025-11-17 10:39:27,333 - ERROR - Cannot reach 10.13.0.39 on port 22. Check network, firewall, or SSH service.
+2025-11-17 10:39:27,333 - WARNING - Till5 (10.13.0.39) is not in network
+2025-11-17 10:39:27,333 - INFO - [chan 1] sftp session closed.
+2025-11-17 10:39:27,335 - INFO - Host 10.0.94.12 deployment complete: 1/5 tills successful
+2025-11-17 10:39:27,374 - INFO - Deployment complete. Detailed log: deployment_20251117_103855.log
+2025-11-17 10:39:27,374 - INFO - Summary Excel log saved to: deployment_log_20251117_103927.xlsx
+2025-11-17 10:39:27,374 - INFO - Processed 2/2 hosts successfully
+PS D:\VS\Deploy_new>
