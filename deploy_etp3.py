@@ -13,9 +13,9 @@ HOST_USER = 'linuxadmin'
 HOST_PASS = 'St0re@dm1n'  # Confirmed as per your message
 TILL_USER = 'posuser'
 TILL_PASS = 'till@123'
-TILL_BASE_IP = '10.13.0'  # Base for till IPs (e.g., 10.13.0.35 for Till1)
-TILL_START_OFFSET = 34  # 10.13.0.{34 + till_num} for Till1=35
-TILL_DEST_BASE = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'  # As per your correction
+TILL_START_OCTET = 111  # Till1 -> .112, Till2 -> .113, etc. (111 + till_num)
+TILL_DEST_BASE = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'  # As per requirement
+HOST_DEST = '/home/linuxadmin/ETPStoreFrontV5.5'  # Fixed for hosts
 TIMEOUT_CONNECT = 3  # Seconds for connection attempts
 TIMEOUT_TRANSFER = 6  # Approximate for transfer operations (paramiko timeouts)
 
@@ -158,9 +158,10 @@ def copy_dir_between_sfpts(sftp_src, sftp_dest, src_dir, dst_dir):
 
 def deploy_to_host(host_ip, max_till, results):
     """Deploy to a single host and its tills, appending results."""
-    host_dest = f'/home/{HOST_USER}/ETPStoreFrontV5.5'  # Dynamic per host, but same path
+    # Compute network prefix for tills (first 3 octets of host_ip)
+    prefix = '.'.join(host_ip.split('.')[:3])
 
-    logger.info(f"Processing host {host_ip} with {max_till} tills")
+    logger.info(f"Processing host {host_ip} with {max_till} tills (prefix: {prefix})")
 
     # Step 1: Copy folder from local to host
     logger.info(f"Step 1: Copying ETPStoreFrontV5.5 from local to host {host_ip}")
@@ -176,7 +177,7 @@ def deploy_to_host(host_ip, max_till, results):
     sftp_host = paramiko.SFTPClient.from_transport(host_transport)
     upload_success = False
     try:
-        upload_folder(sftp_host, SOURCE_FOLDER, host_dest)
+        upload_folder(sftp_host, SOURCE_FOLDER, HOST_DEST)
         logger.info(f"Step 1 completed: Folder uploaded to host {host_ip} successfully")
         upload_success = True
     except Exception as e:
@@ -197,7 +198,8 @@ def deploy_to_host(host_ip, max_till, results):
     till_success_count = 0
     try:
         for till_num in range(1, max_till + 1):
-            till_ip = f"{TILL_BASE_IP}.{TILL_START_OFFSET + till_num}"
+            till_octet = TILL_START_OCTET + till_num  # 111 + 1 = 112 for Till1
+            till_ip = f"{prefix}.{till_octet}"
             logger.info(f"Processing Till{till_num} ({till_ip}) for host {host_ip}")
 
             till_transport = connect_transport(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT)
@@ -231,8 +233,8 @@ def deploy_to_host(host_ip, max_till, results):
                 except Exception as e:
                     raise Exception(f"Cannot access destination: {str(e)}")
 
-                # Copy contents of host_dest into TILL_DEST_BASE (overwrites, no deletions)
-                copy_dir_between_sfpts(sftp_host, sftp_till, host_dest, TILL_DEST_BASE)
+                # Copy contents of HOST_DEST into TILL_DEST_BASE (overwrites, no deletions)
+                copy_dir_between_sfpts(sftp_host, sftp_till, HOST_DEST, TILL_DEST_BASE)
                 logger.info(f"Transfer completed successfully for Till{till_num}")
                 transfer_success = True
                 till_success_count += 1
