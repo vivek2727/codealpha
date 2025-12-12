@@ -1,0 +1,354 @@
+```python
+import os
+import logging
+import shutil
+import paramiko
+import socket
+import pandas as pd
+from stat import S_ISDIR
+from datetime import datetime
+
+# Configuration - Adjust as needed
+SOURCE_FOLDER = r'C:\Source\ETPStoreFrontV5.5'
+HOST_USER = 'linuxadmin'
+HOST_PASS = 'St0re@dm1n'  # Confirmed as per your message
+TILL_USER = 'posuser'
+TILL_PASS = 'till@123'
+TILL_START_OCTET = 111  # Till1 -> .112, Till2 -> .113, etc. (111 + till_num)
+TILL_DEST_BASE = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'  # As per requirement
+HOST_DEST = '/home/linuxadmin/ETPStoreFrontV5.5'  # Fixed for hosts
+TIMEOUT_CONNECT = 3  # Seconds for connection attempts
+TIMEOUT_TRANSFER = 6  # Approximate for transfer operations (paramiko timeouts)
+
+# Setup logging: Logs to file and console
+log_filename = f'deployment_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_filename),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+def is_port_reachable(host, port, timeout):
+    """Check if the host's port is reachable within timeout."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
+    try:
+        result = sock.connect_ex((host, port))
+        sock.close()
+        if result == 0:
+            logger.debug(f"Port {port} on {host} is reachable")
+            return True
+        else:
+            logger.warning(f"Port {port} on {host} is not reachable (error code: {result})")
+            return False
+    except socket.timeout:
+        logger.error(f"Timeout while checking port {port} on {host}")
+        return False
+    except Exception as e:
+        logger.error(f"Error checking port {port} on {host}: {str(e)}")
+        return False
+
+def connect_transport(host, username, password, timeout, port=22):
+    """Connect to SSH transport with timeout."""
+    logger.info(f"Attempting to connect to {host}:{port} as {username} (timeout: {timeout}s)")
+
+    # Pre-check port reachability
+    if not is_port_reachable(host, port, timeout):
+        logger.error(f"Cannot reach {host} on port {port}. Check network, firewall, or SSH service.")
+        return None
+
+    sock = None
+    transport = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        logger.debug("TCP connect initiated...")
+        sock.connect((host, port))
+        logger.debug("TCP connect successful. Starting SSH handshake...")
+
+        transport = paramiko.Transport(sock)
+        transport.banner_timeout = timeout
+        transport.packetizer.REKEY_BYTES = 5000000  # Reduce rekey to avoid long waits
+        transport.start_client(timeout=timeout)
+
+        logger.debug("SSH handshake started. Authenticating...")
+        transport.auth_password(username, password)
+        transport.set_keepalive(30)
+        logger.info(f"Successfully connected and authenticated to {host} as {username}")
+        return transport
+
+    except paramiko.AuthenticationException:
+        logger.error(f"Authentication failed for {username}@{host}. Check username/password.")
+        return None
+    except paramiko.SSHException as e:
+        logger.error(f"SSH error connecting to {host}: {str(e)}")
+        return None
+    except socket.timeout:
+        logger.error(f"Timeout during connection/handshake to {host} after {timeout}s")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error connecting to {host} as {username}: {str(e)}")
+        return None
+    finally:
+        if sock and not transport:
+            sock.close()
+
+def upload_folder(sftp, local_dir, remote_dir):
+    """Recursively upload local folder contents to remote directory."""
+    if not os.path.isdir(local_dir):
+        raise Exception(f"Local folder not found: {local_dir}")
+
+    try:
+        sftp.mkdir(remote_dir)
+        logger.info(f"Created remote directory: {remote_dir}")
+    except IOError:
+        logger.debug(f"Remote directory already exists: {remote_dir}")
+
+    for item in os.listdir(local_dir):
+        local_item = os.path.join(local_dir, item)
+        remote_item = f"{remote_dir}/{item}"
+        try:
+            if os.path.isdir(local_item):
+                upload_folder(sftp, local_item, remote_item)
+            else:
+                sftp.put(local_item, remote_item)
+                logger.debug(f"Uploaded file: {item}")
+        except Exception as e:
+            logger.error(f"Failed to upload {item}: {str(e)}")
+            raise  # Re-raise to fail the whole operation
+
+def copy_dir_between_sfpts(sftp_src, sftp_dest, src_dir, dst_dir):
+    """Recursively copy directory contents from one SFTP to another. Overwrites existing files; does not delete extras."""
+    try:
+        attrs = sftp_src.listdir_attr(src_dir)
+    except Exception as e:
+        logger.error(f"Cannot list source directory {src_dir}: {str(e)}")
+        return
+
+    try:
+        sftp_dest.stat(dst_dir)
+        logger.debug(f"Destination {dst_dir} exists")
+    except FileNotFoundError:
+        sftp_dest.mkdir(dst_dir)
+        logger.info(f"Created destination directory: {dst_dir}")
+    except Exception as e:
+        logger.error(f"Cannot access/create destination {dst_dir}: {str(e)}")
+        return
+
+    for attr in attrs:
+        if attr.filename.startswith('.'):
+            continue  # Skip hidden files
+        src_item = f"{src_dir}/{attr.filename}"
+        dst_item = f"{dst_dir}/{attr.filename}"
+        try:
+            if S_ISDIR(attr.st_mode):
+                copy_dir_between_sfpts(sftp_src, sftp_dest, src_item, dst_item)
+            else:
+                # Stream copy without temp files; overwrites if exists
+                with sftp_src.open(src_item, 'rb') as fr:
+                    with sftp_dest.open(dst_item, 'wb') as fw:
+                        shutil.copyfileobj(fr, fw)
+                logger.debug(f"Copied {attr.filename}")
+        except Exception as e:
+            logger.error(f"Failed to copy {attr.filename}: {str(e)}")
+            # Continue to next item
+
+def delete_remote_folder(sftp, remote_dir):
+    """Recursively delete a remote directory and its contents."""
+    try:
+        attrs = sftp.listdir_attr(remote_dir)
+    except Exception as e:
+        logger.warning(f"Cannot list remote directory {remote_dir} for deletion: {str(e)}")
+        return
+
+    for attr in attrs:
+        if attr.filename.startswith('.'):
+            continue  # Skip hidden files
+        item = f"{remote_dir}/{attr.filename}"
+        try:
+            if S_ISDIR(attr.st_mode):
+                delete_remote_folder(sftp, item)
+            else:
+                sftp.remove(item)
+                logger.debug(f"Deleted file: {attr.filename}")
+        except Exception as e:
+            logger.error(f"Failed to delete {item}: {str(e)}")
+            # Continue to next item
+
+    try:
+        sftp.rmdir(remote_dir)
+        logger.info(f"Deleted directory: {remote_dir}")
+    except Exception as e:
+        logger.error(f"Failed to delete directory {remote_dir}: {str(e)}")
+
+def deploy_to_host(host_ip, max_till, results):
+    """Deploy to a single host and its tills, appending results."""
+    # Compute network prefix for tills (first 3 octets of host_ip)
+    prefix = '.'.join(host_ip.split('.')[:3])
+
+    logger.info(f"Processing host {host_ip} with {max_till} tills (prefix: {prefix})")
+
+    # Step 1: Copy folder from local to host
+    logger.info(f"Step 1: Copying ETPStoreFrontV5.5 from local to host {host_ip}")
+    if not os.path.exists(SOURCE_FOLDER):
+        logger.error(f"Source folder not found: {SOURCE_FOLDER}")
+        return False
+
+    host_transport = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT)
+    if not host_transport:
+        logger.error(f"Failed to connect to host {host_ip}. Skipping.")
+        return False
+
+    sftp_host = paramiko.SFTPClient.from_transport(host_transport)
+    upload_success = False
+    try:
+        upload_folder(sftp_host, SOURCE_FOLDER, HOST_DEST)
+        logger.info(f"Step 1 completed: Folder uploaded to host {host_ip} successfully")
+        upload_success = True
+    except Exception as e:
+        logger.error(f"Step 1 failed for host {host_ip}: {str(e)}")
+    finally:
+        sftp_host.close()
+
+    if not upload_success:
+        host_transport.close()
+        return False
+
+    # Keep host connection open for Step 2
+    host_transport.set_keepalive(30)
+
+    # Step 2: Distribute from host to tills
+    logger.info(f"Step 2: Distributing from host {host_ip} to tills")
+    sftp_host = paramiko.SFTPClient.from_transport(host_transport)
+    till_success_count = 0
+    try:
+        for till_num in range(1, max_till + 1):
+            till_octet = TILL_START_OCTET + till_num  # 111 + 1 = 112 for Till1
+            till_ip = f"{prefix}.{till_octet}"
+            logger.info(f"Processing Till{till_num} ({till_ip}) for host {host_ip}")
+
+            till_transport = connect_transport(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT)
+            transfer_success = False
+            if not till_transport:
+                logger.warning(f"Till{till_num} ({till_ip}) is not in network")
+                results.append({'HostIP': host_ip, 'TillIP': till_ip, 'Status': 'Failure'})
+                continue
+
+            # Set timeout on transport socket before creating SFTP
+            till_transport.sock.settimeout(TIMEOUT_TRANSFER)
+
+            sftp_till = paramiko.SFTPClient.from_transport(till_transport)
+            try:
+                # Check/create TILL_DEST_BASE (includes ETPStoreFrontV5.5)
+                try:
+                    sftp_till.stat(TILL_DEST_BASE)
+                    logger.info(f"Destination exists on Till{till_num}")
+                except FileNotFoundError:
+                    # Create parent ETPSuite if needed
+                    parent_dir = '/home/posuser/ETPSuite'
+                    try:
+                        sftp_till.stat(parent_dir)
+                    except FileNotFoundError:
+                        sftp_till.mkdir(parent_dir)
+                        logger.info(f"Created parent directory {parent_dir} on Till{till_num}")
+                    sftp_till.mkdir(TILL_DEST_BASE)
+                    logger.info(f"Created {TILL_DEST_BASE} on Till{till_num}")
+                except PermissionError:
+                    raise Exception("Rights to create/access destination not present")
+                except Exception as e:
+                    raise Exception(f"Cannot access destination: {str(e)}")
+
+                # Copy contents of HOST_DEST into TILL_DEST_BASE (overwrites, no deletions)
+                copy_dir_between_sfpts(sftp_host, sftp_till, HOST_DEST, TILL_DEST_BASE)
+                logger.info(f"Transfer completed successfully for Till{till_num}")
+                transfer_success = True
+                till_success_count += 1
+
+            except Exception as e:
+                logger.error(f"Transfer failed for Till{till_num} ({till_ip}): {str(e)}")
+            finally:
+                sftp_till.close()
+                if till_transport:
+                    till_transport.close()
+
+            status = 'Success' if transfer_success else 'Failure'
+            results.append({'HostIP': host_ip, 'TillIP': till_ip, 'Status': status})
+            logger.info(f"Status for Till{till_num} ({till_ip}): {status}")
+
+    finally:
+        sftp_host.close()
+        host_transport.close()
+
+    # Cleanup: Delete the folder on host after distribution
+    logger.info(f"Step 3: Cleaning up folder on host {host_ip}")
+    host_transport_cleanup = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT)
+    if host_transport_cleanup:
+        sftp_cleanup = paramiko.SFTPClient.from_transport(host_transport_cleanup)
+        try:
+            delete_remote_folder(sftp_cleanup, HOST_DEST)
+            logger.info(f"Cleanup completed for host {host_ip}")
+        except Exception as e:
+            logger.error(f"Cleanup failed for host {host_ip}: {str(e)}")
+        finally:
+            sftp_cleanup.close()
+            host_transport_cleanup.close()
+    else:
+        logger.warning(f"Could not reconnect to host {host_ip} for cleanup")
+
+    logger.info(f"Host {host_ip} deployment complete: {till_success_count}/{max_till} tills successful")
+    return True
+
+def main():
+    logger.info("Starting multi-host deployment script")
+
+    # Get config file path
+    config_file = input("Enter path to config Excel file (or press Enter for 'deployment_config.xlsx'): ").strip()
+    if not config_file:
+        config_file = 'deployment_config.xlsx'
+
+    if not os.path.exists(config_file):
+        logger.error(f"Config file not found: {config_file}")
+        return
+
+    try:
+        df_config = pd.read_excel(config_file)
+        if 'HostIP' not in df_config.columns or 'MaxTill' not in df_config.columns:
+            logger.error("Config Excel must have columns: 'HostIP' and 'MaxTill'")
+            return
+    except Exception as e:
+        logger.error(f"Failed to read config file {config_file}: {str(e)}")
+        return
+
+    results = []
+    host_success_count = 0
+
+    for index, row in df_config.iterrows():
+        host_ip = str(row['HostIP']).strip()
+        try:
+            max_till = int(row['MaxTill'])
+            if max_till <= 0:
+                logger.warning(f"Invalid MaxTill {max_till} for {host_ip}; skipping")
+                continue
+        except (ValueError, TypeError):
+            logger.error(f"Invalid MaxTill for {host_ip}; skipping")
+            continue
+
+        # Deploy to this host
+        if deploy_to_host(host_ip, max_till, results):
+            host_success_count += 1
+
+    # Save results to Excel
+    excel_log = f'deployment_log_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    pd.DataFrame(results).to_excel(excel_log, index=False)
+    logger.info(f"Deployment complete. Detailed log: {log_filename}")
+    logger.info(f"Summary Excel log saved to: {excel_log}")
+    logger.info(f"Processed {host_success_count}/{len(df_config)} hosts successfully")
+
+if __name__ == "__main__":
+    # Note: Run with Python 3.x. Install paramiko and pandas: pip install paramiko pandas openpyxl
+    main()
+```
