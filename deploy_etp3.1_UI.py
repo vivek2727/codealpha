@@ -1,3 +1,4 @@
+```python
 import os
 import logging
 import shutil
@@ -29,6 +30,7 @@ class DeploymentGUI:
         self.root.geometry("800x600")
 
         # Variables
+        self.source_folder = tk.StringVar(value=DEFAULT_SOURCE_FOLDER)
         self.config_file = tk.StringVar(value='deployment_config.xlsx')
         self.stop_event = Event()
         self.is_deploying = False
@@ -40,6 +42,13 @@ class DeploymentGUI:
         self.setup_logging()
 
     def setup_ui(self):
+        # Source Folder Selection
+        tk.Label(self.root, text="Source Folder:").pack(pady=5)
+        source_frame = tk.Frame(self.root)
+        source_frame.pack(pady=5, fill=tk.X, padx=10)
+        tk.Entry(source_frame, textvariable=self.source_folder, width=60).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(source_frame, text="Browse", command=self.browse_source).pack(side=tk.RIGHT, padx=5)
+
         # Config File Selection
         tk.Label(self.root, text="Config Excel File:").pack(pady=5)
         config_frame = tk.Frame(self.root)
@@ -99,6 +108,11 @@ class DeploymentGUI:
         gui_handler.setFormatter(formatter)
         self.logger.addHandler(gui_handler)
 
+    def browse_source(self):
+        folder = filedialog.askdirectory(initialdir=self.source_folder.get())
+        if folder:
+            self.source_folder.set(folder)
+
     def browse_config(self):
         file = filedialog.askopenfilename(initialdir='.', filetypes=[("Excel files", "*.xlsx *.xls")])
         if file:
@@ -108,10 +122,17 @@ class DeploymentGUI:
         if self.is_deploying:
             return
 
+        source_path = self.source_folder.get()
         config_path = self.config_file.get()
+        if not os.path.exists(source_path):
+            messagebox.showerror("Error", "Source folder does not exist!")
+            return
         if not os.path.exists(config_path):
             messagebox.showerror("Error", "Config file does not exist!")
             return
+
+        global SOURCE_FOLDER
+        SOURCE_FOLDER = source_path
 
         self.is_deploying = True
         self.stop_event.clear()
@@ -472,3 +493,16 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = DeploymentGUI(root)
     root.mainloop()
+```
+
+### Fix for the Error
+The error "name 'SOURCE_FOLDER' is not defined" occurred because the global `SOURCE_FOLDER` variable was not set in the GUI context (it was only defined in the non-GUI version). 
+
+**Key Updates**:
+- **Source Folder Selection**: Added a UI field and "Browse" button for selecting the source folder (defaults to `C:\Source\ETPStoreFrontV5.5`).
+- **Global Setting**: In `start_deployment`, set `global SOURCE_FOLDER; SOURCE_FOLDER = source_path` to pass the UI-selected path to the deployment functions.
+- **Validation**: Checks both source folder and config file existence before starting.
+- **All Functions Updated**: Added `logger` parameter to functions like `upload_folder`, `copy_dir_between_sfpts`, `delete_remote_folder` for GUI logging compatibility.
+- **Stop Event Propagation**: Passes `stop_event` to `deploy_to_host` to check during till loops.
+
+Run the updated script—the deployment will now use the selected source folder, and the error is resolved. If issues persist, share the full log!
