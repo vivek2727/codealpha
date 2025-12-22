@@ -1,0 +1,429 @@
+import os
+import logging
+import shutil
+import paramiko
+import socket
+import pandas as pd
+from stat import S_ISDIR
+from datetime import datetime
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
+from threading import Thread, Event
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import atexit
+
+# Configuration - Adjust as needed
+DEFAULT_SOURCE_FOLDER = r'C:\Source\ETPStoreFrontV5.5'
+HOST_USER = 'linuxadmin'
+HOST_PASS = 'St0re@dm1n'  # Confirmed as per your message
+TILL_USER = 'posuser'
+TILL_PASS = 'till@123'
+TILL_START_OCTET = 111  # Till1 -> .112, Till2 -> .113, etc. (111 + till_num)
+TILL_DEST_BASE = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'  # As per requirement
+HOST_DEST = '/home/linuxadmin/ETPStoreFrontV5.5'  # Fixed for hosts
+HOST_OPERATIONS_DEST = '/home/linuxadmin/ETPSuite'  # Destination for ETP Store Operations
+TIMEOUT_CONNECT = 3  # Seconds for connection attempts
+TIMEOUT_TRANSFER = 6  # Approximate for transfer operations (paramiko timeouts)
+MAX_WORKERS = 5  # Number of concurrent hosts to process (adjust based on network capacity)
+
+SOURCE_FOLDER = DEFAULT_SOURCE_FOLDER  # Global, set dynamically
+
+class DeploymentGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("ETP Deployment Tool")
+        self.root.geometry("800x650")
+
+        # Variables
+        self.source_folder = tk.StringVar(value=DEFAULT_SOURCE_FOLDER)
+        self.config_file = tk.StringVar(value='deployment_config.xlsx')
+        self.stop_event = Event()
+        self.is_deploying = False
+        self.is_reattempting = False
+        self.logger = None
+        self.deployment_thread = None
+        self.reattempt_thread = None
+        self.excel_log = None
+        self.last_results_file = None
+        self.total_hosts = 0
+        self.completed_hosts = 0
+        self.results = []  # Track results for periodic saving
+
+        self.setup_ui()
+        self.setup_logging()
+        atexit.register(self.save_on_exit)  # Save on app crash/exit
+
+    def save_on_exit(self):
+        if self.results and self.excel_log:
+            try:
+                pd.DataFrame(self.results).to_excel(self.excel_log, index=False)
+                self.logger.info("Emergency save completed on exit.")
+            except Exception as e:
+                self.logger.error(f"Emergency save failed: {str(e)}")
+
+    def setup_ui(self):
+        # Source Folder Selection
+        tk.Label(self.root, text="Source Folder:").pack(pady=5)
+        source_frame = tk.Frame(self.root)
+        source_frame.pack(pady=5, fill=tk.X, padx=10)
+        tk.Entry(source_frame, textvariable=self.source_folder, width=60).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(source_frame, text="Browse", command=self.browse_source).pack(side=tk.RIGHT, padx=5)
+
+        # Config File Selection
+        tk.Label(self.root, text="Config Excel File:").pack(pady=5)
+        config_frame = tk.Frame(self.root)
+        config_frame.pack(pady=5, fill=tk.X, padx=10)
+        tk.Entry(config_frame, textvariable=self.config_file, width=60).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(config_frame, text="Browse", command=self.browse_config).pack(side=tk.RIGHT, padx=5)
+
+        # Buttons Frame
+        button_frame = tk.Frame(self.root)
+        button_frame.pack(pady=10)
+
+        self.start_btn = tk.Button(button_frame, text="Start Deployment", command=self.start_deployment, bg='green', fg='white', width=15)
+        self.start_btn.pack(side=tk.LEFT, padx=5)
+
+        self.stop_btn = tk.Button(button_frame, text="Stop Deployment", command=self.stop_deployment, bg='red', fg='white', width=15, state=tk.DISABLED)
+        self.stop_btn.pack(side=tk.LEFT, padx=5)
+
+        self.reattempt_btn = tk.Button(button_frame, text="Reattempt Failed Tills", command=self.start_reattempt, bg='blue', fg='white', width=20)
+        self.reattempt_btn.pack(side=tk.LEFT, padx=5)
+
+        # Progress Bar
+        self.progress = ttk.Progressbar(self.root, mode='determinate', length=400, maximum=100)
+        self.progress.pack(pady=10, fill=tk.X, padx=10)
+
+        # Progress Label
+        self.progress_label = tk.Label(self.root, text="0% Complete")
+        self.progress_label.pack(pady=5)
+
+        # Status Label
+        self.status_label = tk.Label(self.root, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
+        self.status_label.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+
+        # Log Text Area
+        tk.Label(self.root, text="Log:").pack(pady=5)
+        self.log_text = scrolledtext.ScrolledText(self.root, height=18, width=80)
+        self.log_text.pack(pady=5, fill=tk.BOTH, expand=True, padx=10)
+
+        # Results Button
+        self.results_btn = tk.Button(self.root, text="Open Results Excel", command=self.open_results, state=tk.DISABLED)
+        self.results_btn.pack(pady=5)
+
+    def setup_logging(self):
+        self.log_filename = f'deployment_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+        file_handler = logging.FileHandler(self.log_filename)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+        self.logger.addHandler(file_handler)
+
+        # Redirect to GUI
+        class TextHandler(logging.Handler):
+            def __init__(self, text_widget):
+                logging.Handler.__init__(self)
+                self.text_widget = text_widget
+
+            def emit(self, record):
+                msg = self.format(record)
+                self.text_widget.insert(tk.END, msg + '\n')
+                self.text_widget.see(tk.END)
+
+        gui_handler = TextHandler(self.log_text)
+        gui_handler.setFormatter(formatter)
+        self.logger.addHandler(gui_handler)
+
+    def browse_source(self):
+        folder = filedialog.askdirectory(initialdir=self.source_folder.get())
+        if folder:
+            self.source_folder.set(folder)
+
+    def browse_config(self):
+        file = filedialog.askopenfilename(initialdir='.', filetypes=[("Excel files", "*.xlsx *.xls")])
+        if file:
+            self.config_file.set(file)
+
+    def start_deployment(self):
+        if self.is_deploying:
+            return
+
+        source_path = self.source_folder.get()
+        config_path = self.config_file.get()
+        if not os.path.exists(source_path):
+            messagebox.showerror("Error", "Source folder does not exist!")
+            return
+        if not os.path.exists(config_path):
+            messagebox.showerror("Error", "Config file does not exist!")
+            return
+
+        global SOURCE_FOLDER
+        SOURCE_FOLDER = source_path
+
+        # Calculate total hosts for progress
+        try:
+            df_config = pd.read_excel(config_path)
+            self.total_hosts = len(df_config)
+            self.results = []  # Reset results
+        except:
+            self.total_hosts = 1  # Fallback
+            messagebox.showerror("Error", "Invalid config file!")
+            return
+
+        self.is_deploying = True
+        self.reattempt_btn.config(state=tk.DISABLED)  # Disable reattempt during deployment
+        self.results_btn.config(state=tk.DISABLED)  # Disable results during deployment
+        self.stop_event.clear()
+        self.start_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        self.progress['value'] = 0
+        self.progress_label.config(text="0% Complete")
+        self.status_label.config(text="Deploying...")
+
+        self.deployment_thread = Thread(target=self.run_deployment, args=(config_path,))
+        self.deployment_thread.daemon = True
+        self.deployment_thread.start()
+
+    def stop_deployment(self):
+        if self.is_deploying:
+            self.stop_event.set()
+            self.status_label.config(text="Stopping...")
+            self.logger.info("Stop signal sent. Deployment will stop after current operation.")
+
+    def update_progress(self, completed_hosts):
+        percentage = (completed_hosts / self.total_hosts) * 100 if self.total_hosts > 0 else 0
+        self.progress['value'] = percentage
+        self.progress_label.config(text=f"{int(percentage)}% Complete")
+        self.root.update_idletasks()
+
+    def save_results_periodically(self):
+        if self.results:
+            temp_excel = self.excel_log or f'temp_deployment_log_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+            try:
+                pd.DataFrame(self.results).to_excel(temp_excel, index=False)
+                self.excel_log = temp_excel
+                self.logger.info(f"Periodic save to {temp_excel}")
+            except Exception as e:
+                self.logger.error(f"Periodic save failed: {str(e)}")
+
+    def run_deployment(self, config_file):
+        try:
+            # Run the main logic with multi-threading
+            host_success_count = 0
+            completed_hosts = 0
+            df_config = pd.read_excel(config_file)
+
+            # Prepare host tasks
+            host_tasks = []
+            for index, row in df_config.iterrows():
+                host_ip = str(row['HostIP']).strip()  # Trim IP
+                try:
+                    max_till = int(str(row['MaxTill']).strip())  # Trim and convert
+                    if max_till <= 0:
+                        self.logger.warning(f"Invalid MaxTill {max_till} for {host_ip}; skipping")
+                        continue
+                except (ValueError, TypeError):
+                    self.logger.error(f"Invalid MaxTill for {host_ip}; skipping")
+                    continue
+                host_tasks.append((host_ip, max_till))
+
+            def process_host(task):
+                host_ip, max_till = task
+                local_results = []
+                if self.stop_event.is_set():
+                    return local_results
+                success = deploy_to_host(host_ip, max_till, local_results, self.stop_event, self.logger)
+                if success:
+                    nonlocal host_success_count
+                    host_success_count += 1
+                nonlocal completed_hosts
+                completed_hosts += 1
+                self.root.after(0, lambda: self.update_progress(completed_hosts))
+                self.root.after(0, self.save_results_periodically)
+                return local_results
+
+            # Multi-threaded execution
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                future_to_host = {executor.submit(process_host, task): task for task in host_tasks}
+                for future in as_completed(future_to_host):
+                    if self.stop_event.is_set():
+                        break
+                    local_results = future.result()
+                    self.results.extend(local_results)
+
+            # Final save with HostStatus column
+            self.excel_log = f'deployment_log_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+            self.last_results_file = self.excel_log
+            df_results = pd.DataFrame(self.results)
+            if not df_results.empty:
+                # Add HostStatus column, set to 'Done' for all (since upload happened per host)
+                df_results['HostStatus'] = 'Done'
+            df_results.to_excel(self.excel_log, index=False)
+            self.logger.info(f"Deployment complete. Detailed log: {self.log_filename}")
+            self.logger.info(f"Summary Excel log saved to: {self.excel_log}")
+            self.logger.info(f"Processed {host_success_count}/{len(host_tasks)} hosts successfully")
+
+        except Exception as e:
+            self.logger.error(f"Deployment failed: {str(e)}")
+        finally:
+            self.root.after(0, self.deployment_complete)
+
+    def start_reattempt(self):
+        if self.is_reattempting or not self.last_results_file or not os.path.exists(self.last_results_file):
+            if not self.last_results_file:
+                messagebox.showerror("Error", "No previous deployment results found. Run a deployment first.")
+                return
+            if not os.path.exists(self.last_results_file):
+                messagebox.showerror("Error", "Previous results file not found.")
+                return
+            return
+
+        source_path = self.source_folder.get()
+        if not os.path.exists(source_path):
+            messagebox.showerror("Error", "Source folder does not exist!")
+            return
+
+        global SOURCE_FOLDER
+        SOURCE_FOLDER = source_path
+
+        # Read previous results and filter failed tills
+        try:
+            df_results = pd.read_excel(self.last_results_file)
+            failed_tills = df_results[df_results['Status'] == 'Failure'][['HostIP', 'TillIP']].drop_duplicates()
+            if failed_tills.empty:
+                messagebox.showinfo("Info", "No failed tills to reattempt.")
+                return
+            self.total_hosts = len(failed_tills)  # Treat as "total tasks" for progress
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to read results: {str(e)}")
+            return
+
+        self.is_reattempting = True
+        self.reattempt_btn.config(state=tk.DISABLED)
+        self.results_btn.config(state=tk.DISABLED)  # Disable results during reattempt
+        self.stop_event.clear()
+        self.start_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        self.progress['value'] = 0
+        self.progress_label.config(text="0% Complete")
+        self.status_label.config(text="Reattempting Failed Tills...")
+
+        self.reattempt_thread = Thread(target=self.run_reattempt, args=(failed_tills,))
+        self.reattempt_thread.daemon = True
+        self.reattempt_thread.start()
+
+    def run_reattempt(self, failed_tills):
+        try:
+            reattempt_results = []
+            completed_tills = 0
+
+            # Multi-threaded reattempt
+            def reattempt_till(row):
+                if self.stop_event.is_set():
+                    return None
+                host_ip = row['HostIP']
+                till_ip = row['TillIP']
+                self.logger.info(f"Reattempting Till {till_ip} for host {host_ip}")
+
+                transfer_success = False
+                till_transport = connect_transport(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, logger=self.logger)
+                if not till_transport:
+                    self.logger.warning(f"Reattempt failed: Till {till_ip} is not in network")
+                else:
+                    till_transport.sock.settimeout(TIMEOUT_TRANSFER)
+                    sftp_till = paramiko.SFTPClient.from_transport(till_transport)
+                    try:
+                        # Check/create TILL_DEST_BASE
+                        try:
+                            sftp_till.stat(TILL_DEST_BASE)
+                            self.logger.info(f"Destination exists on Till {till_ip}")
+                        except FileNotFoundError:
+                            parent_dir = '/home/posuser/ETPSuite'
+                            try:
+                                sftp_till.stat(parent_dir)
+                            except FileNotFoundError:
+                                sftp_till.mkdir(parent_dir)
+                                self.logger.info(f"Created parent directory {parent_dir} on Till {till_ip}")
+                            sftp_till.mkdir(TILL_DEST_BASE)
+                            self.logger.info(f"Created {TILL_DEST_BASE} on Till {till_ip}")
+                        except PermissionError:
+                            raise Exception("Rights to create/access destination not present")
+                        except Exception as e:
+                            raise Exception(f"Cannot access destination: {str(e)}")
+
+                        # Direct upload from local source to till (contents of SOURCE_FOLDER to TILL_DEST_BASE)
+                        upload_folder(sftp_till, SOURCE_FOLDER, TILL_DEST_BASE, self.logger)
+                        self.logger.info(f"Reattempt transfer completed successfully for Till {till_ip}")
+                        transfer_success = True
+
+                    except Exception as e:
+                        self.logger.error(f"Reattempt transfer failed for Till {till_ip}: {str(e)}")
+                    finally:
+                        sftp_till.close()
+                        till_transport.close()
+
+                status = 'Reattempt Success' if transfer_success else 'Reattempt Failure'
+                self.logger.info(f"Reattempt Status for Till {till_ip}: {status}")
+                return {'HostIP': host_ip, 'TillIP': till_ip, 'Original Status': 'Failure', 'Reattempt Status': status}
+
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                future_to_till = {executor.submit(reattempt_till, row): row for _, row in failed_tills.iterrows()}
+                for future in as_completed(future_to_till):
+                    if self.stop_event.is_set():
+                        break
+                    result = future.result()
+                    if result:
+                        reattempt_results.append(result)
+
+                    completed_tills += 1
+                    percentage = (completed_tills / len(failed_tills)) * 100
+                    self.root.after(0, lambda p=percentage: self.progress.config(value=p) or self.progress_label.config(text=f"{int(p)}% Complete"))
+
+            # Save reattempt results to Excel
+            reattempt_excel = f'reattempt_log_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+            pd.DataFrame(reattempt_results).to_excel(reattempt_excel, index=False)
+            self.logger.info(f"Reattempt complete. Log saved to: {reattempt_excel}")
+
+        except Exception as e:
+            self.logger.error(f"Reattempt failed: {str(e)}")
+        finally:
+            self.root.after(0, self.reattempt_complete)
+
+    def reattempt_complete(self):
+        self.is_reattempting = False
+        self.reattempt_btn.config(state=tk.NORMAL)
+        self.results_btn.config(state=tk.NORMAL)  # Re-enable results after reattempt
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        self.progress.stop()
+        self.status_label.config(text="Reattempt Complete" if not self.stop_event.is_set() else "Reattempt Stopped")
+        self.results_btn.config(state=tk.NORMAL)
+        if not self.stop_event.is_set():
+            messagebox.showinfo("Complete", "Reattempt finished. Check log for details.")
+
+    def deployment_complete(self):
+        self.is_deploying = False
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        self.reattempt_btn.config(state=tk.NORMAL)  # Re-enable reattempt after deployment
+        self.results_btn.config(state=tk.NORMAL)  # Re-enable results
+        self.progress.stop()
+        self.status_label.config(text="Deployment Complete" if not self.stop_event.is_set() else "Deployment Stopped")
+        self.results_btn.config(state=tk.NORMAL)
+        if not self.stop_event.is_set():
+            messagebox.showinfo("Complete", "Deployment finished. Check log for details.")
+
+    def open_results(self):
+        if self.excel_log and os.path.exists(self.excel_log):
+            os.startfile(self.excel_log)
+
+def is_port_reachable(host, port, timeout, logger):
+    """Check if the host's port is reachable within timeout."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
+    try:
+        result = sock.connect_ex((host, port))
+        sock.close()
+        if result == 0:
+            logger.debug(f"Port {port} on {host} is
