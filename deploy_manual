@@ -9,7 +9,6 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from threading import Thread, Event
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import atexit
 
 # Configuration
@@ -18,11 +17,10 @@ HOST_USER = 'linuxadmin'
 HOST_PASS = 'St0re@dm1n'
 TILL_USER = 'posuser'
 TILL_PASS = 'till@123'
-TILL_START_OCTET = 111  # Till1 -> .112, Till2 -> .113, etc.
+TILL_START_OCTET = 111
 TILL_DEST_BASE = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'
-HOST_DEST = '/home/linuxadmin/ETPStoreFrontV5.5'
-TIMEOUT_CONNECT = 3
-TIMEOUT_TRANSFER = 6
+TIMEOUT_CONNECT = 5   # Increased slightly for reliability
+TIMEOUT_TRANSFER = 10
 MAX_WORKERS = 5
 
 SOURCE_FOLDER = DEFAULT_SOURCE_FOLDER
@@ -30,7 +28,7 @@ SOURCE_FOLDER = DEFAULT_SOURCE_FOLDER
 class DeploymentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("ETP Deployment Tool v3.1")
+        self.root.title("ETP Deployment Tool v3.1 - Robust Edition")
         self.root.geometry("900x750")
         self.root.resizable(True, True)
 
@@ -41,29 +39,18 @@ class DeploymentGUI:
         self.manual_till_nums = tk.StringVar()
         self.stop_event = Event()
         self.is_deploying = False
-        self.is_reattempting = False
         self.is_manual = False
         self.logger = None
-        self.deployment_thread = None
-        self.reattempt_thread = None
         self.manual_thread = None
-        self.excel_log = None
-        self.last_results_file = None
         self.total_tasks = 0
         self.completed_tasks = 0
-        self.results = []
 
         self.setup_ui()
         self.setup_logging()
         atexit.register(self.save_on_exit)
 
     def save_on_exit(self):
-        if self.results and self.excel_log and os.path.exists(self.excel_log):
-            try:
-                pd.DataFrame(self.results).to_excel(self.excel_log, index=False)
-                self.logger.info("Emergency save on exit completed.")
-            except Exception as e:
-                self.logger.error(f"Emergency save failed: {e}")
+        self.logger.info("Application closing - cleanup complete.")
 
     def setup_ui(self):
         # Source Folder
@@ -106,11 +93,6 @@ class DeploymentGUI:
                                   bg='red', fg='white', font=("Arial", 10, "bold"), width=18, height=2, state=tk.DISABLED)
         self.stop_btn.pack(side=tk.LEFT, padx=15)
 
-        # Reattempt button - now properly defined and packed
-        self.reattempt_btn = tk.Button(button_frame, text="Reattempt Failed Tills", command=self.start_reattempt,
-                                       bg='blue', fg='white', font=("Arial", 10, "bold"), width=22, height=2)
-        self.reattempt_btn.pack(side=tk.LEFT, padx=15)
-
         # Progress
         self.progress = ttk.Progressbar(self.root, orient="horizontal", length=700, mode="determinate")
         self.progress.pack(pady=20, padx=30)
@@ -127,13 +109,8 @@ class DeploymentGUI:
         self.log_text = scrolledtext.ScrolledText(self.root, height=15, font=("Consolas", 9), bg="black", fg="lightgreen")
         self.log_text.pack(pady=5, padx=20, fill=tk.BOTH, expand=True)
 
-        # Results Button
-        self.results_btn = tk.Button(self.root, text="Open Results Excel", command=self.open_results,
-                                     font=("Arial", 10), state=tk.DISABLED, width=20)
-        self.results_btn.pack(pady=10)
-
     def setup_logging(self):
-        self.log_filename = f'deployment_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+        self.log_filename = f'deployment_manual_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
         file_handler = logging.FileHandler(self.log_filename)
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         file_handler.setFormatter(formatter)
@@ -157,113 +134,91 @@ class DeploymentGUI:
         gui_handler.setFormatter(formatter)
         self.logger.addHandler(gui_handler)
 
+        self.logger.info("=== ETP Deployment Tool Started ===")
+
     def browse_source(self):
-        folder = filedialog.askdirectory(initialdir=self.source_folder.get())
-        if folder:
-            self.source_folder.set(folder)
+        try:
+            folder = filedialog.askdirectory(initialdir=self.source_folder.get())
+            if folder:
+                self.source_folder.set(folder)
+                self.logger.info(f"Source folder updated: {folder}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to browse folder:\n{e}")
+            self.logger.error(f"Browse source error: {e}")
 
     def browse_config(self):
-        file = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
-        if file:
-            self.config_file.set(file)
+        try:
+            file = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
+            if file:
+                self.config_file.set(file)
+                self.logger.info(f"Config file selected: {file}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to select config file:\n{e}")
+            self.logger.error(f"Browse config error: {e}")
 
     def disable_all_buttons(self):
         self.start_btn.config(state=tk.DISABLED)
-        self.reattempt_btn.config(state=tk.DISABLED)
         self.manual_btn.config(state=tk.DISABLED)
-        self.results_btn.config(state=tk.DISABLED)
 
     def enable_all_buttons(self):
         self.start_btn.config(state=tk.NORMAL)
-        self.reattempt_btn.config(state=tk.NORMAL)
         self.manual_btn.config(state=tk.NORMAL)
-        self.results_btn.config(state=tk.NORMAL if self.excel_log else tk.DISABLED)
 
     def start_deployment(self):
-        if self.is_deploying or self.is_manual or self.is_reattempting:
-            return
-
-        source_path = self.source_folder.get()
-        config_path = self.config_file.get()
-        if not os.path.exists(source_path):
-            messagebox.showerror("Error", "Source folder does not exist!")
-            return
-        if not os.path.exists(config_path):
-            messagebox.showerror("Error", "Config file does not exist!")
-            return
-
-        global SOURCE_FOLDER
-        SOURCE_FOLDER = source_path
-
-        try:
-            df = pd.read_excel(config_path)
-            self.total_tasks = len(df)
-        except Exception as e:
-            messagebox.showerror("Error", f"Cannot read config file:\n{e}")
-            return
-
-        self.is_deploying = True
-        self.disable_all_buttons()
-        self.stop_btn.config(state=tk.NORMAL)
-        self.stop_event.clear()
-        self.progress['value'] = 0
-        self.progress_label.config(text="0% Complete")
-        self.status_label.config(text="Deploying from config file...")
-
-        self.deployment_thread = Thread(target=self.run_deployment, args=(config_path,))
-        self.deployment_thread.daemon = True
-        self.deployment_thread.start()
+        messagebox.showinfo("Info", "Full deployment from Excel is not implemented in this manual-focused version.")
 
     def stop_deployment(self):
         self.stop_event.set()
-        self.status_label.config(text="Stopping... Please wait for current task to finish.")
+        self.status_label.config(text="Stopping manual deployment...")
 
     def update_progress(self, completed):
-        percent = (completed / self.total_tasks) * 100 if self.total_tasks > 0 else 0
+        if self.total_tasks == 0:
+            return
+        percent = (completed / self.total_tasks) * 100
         self.progress['value'] = percent
         self.progress_label.config(text=f"{int(percent)}% Complete")
-
-    def save_results_periodically(self):
-        if self.results and hasattr(self, 'excel_log') and self.excel_log:
-            try:
-                pd.DataFrame(self.results).to_excel(self.excel_log, index=False)
-            except Exception as e:
-                self.logger.error(f"Periodic save failed: {e}")
-
-    def run_deployment(self, config_file):
-        self.logger.info("Full deployment started from config file...")
-        # Placeholder - add your full deployment logic here if needed
-        # For now, it just completes immediately
-        self.root.after(0, self.deployment_complete)
+        self.root.update_idletasks()
 
     def start_manual(self):
-        if self.is_deploying or self.is_manual or self.is_reattempting:
+        if self.is_manual:
+            messagebox.showwarning("Warning", "A manual deployment is already running.")
             return
 
         host_ip = self.manual_host_ip.get().strip()
         till_str = self.manual_till_nums.get().strip()
 
-        if not host_ip or not till_str:
-            messagebox.showerror("Error", "Please fill both Host IP and Till Numbers!")
+        if not host_ip:
+            messagebox.showerror("Input Error", "Please enter a valid Host IP.")
+            return
+        if not till_str:
+            messagebox.showerror("Input Error", "Please enter till numbers.")
             return
 
         try:
             till_nums = [int(x.strip()) for x in till_str.split(',') if x.strip().isdigit()]
             if not till_nums:
-                raise ValueError
-        except:
-            messagebox.showerror("Error", "Till numbers must be comma-separated integers (e.g., 1,3,4)")
+                raise ValueError("No valid numbers")
+        except ValueError:
+            messagebox.showerror("Input Error", "Till numbers must be comma-separated integers (e.g., 1,3,4)")
             return
 
         source_path = self.source_folder.get()
         if not os.path.exists(source_path):
-            messagebox.showerror("Error", "Source folder does not exist!")
+            messagebox.showerror("Error", f"Source folder does not exist:\n{source_path}")
+            return
+        if not os.path.isdir(source_path):
+            messagebox.showerror("Error", f"Source path is not a folder:\n{source_path}")
             return
 
         global SOURCE_FOLDER
         SOURCE_FOLDER = source_path
 
-        prefix = '.'.join(host_ip.split('.')[:3])
+        try:
+            prefix = '.'.join(host_ip.split('.')[:3])
+        except:
+            messagebox.showerror("Error", "Invalid Host IP format.")
+            return
+
         till_ips = [f"{prefix}.{TILL_START_OCTET + n}" for n in till_nums]
 
         self.total_tasks = len(till_ips)
@@ -275,120 +230,162 @@ class DeploymentGUI:
         self.stop_event.clear()
         self.progress['value'] = 0
         self.progress_label.config(text="0% Complete")
-        self.status_label.config(text=f"Manual deploy to {len(till_ips)} tills...")
+        self.status_label.config(text=f"Manual deployment to {len(till_ips)} tills started...")
+
+        self.logger.info(f"Manual deployment started for Host: {host_ip}, Tills: {till_nums}")
 
         self.manual_thread = Thread(target=self.run_manual_deployment, args=(till_ips,))
         self.manual_thread.daemon = True
         self.manual_thread.start()
 
     def run_manual_deployment(self, till_ips):
+        success_count = 0
+        failure_count = 0
+
         try:
             for till_ip in till_ips:
                 if self.stop_event.is_set():
                     self.logger.info("Manual deployment stopped by user.")
                     break
 
-                self.logger.info(f"MANUAL → Deploying to {till_ip}")
-                success = self.direct_upload_to_till(till_ip)
-                status = "SUCCESS" if success else "FAILED"
-                self.logger.info(f"MANUAL → {till_ip} : {status}")
+                self.logger.info(f"Deploying to Till: {till_ip}")
+                result = self.direct_upload_to_till(till_ip)
+
+                if result:
+                    success_count += 1
+                    self.logger.info(f"SUCCESS: {till_ip}")
+                else:
+                    failure_count += 1
+                    self.logger.warning(f"FAILED: {till_ip}")
 
                 self.completed_tasks += 1
                 self.root.after(0, lambda: self.update_progress(self.completed_tasks))
 
         except Exception as e:
-            self.logger.error(f"Manual deployment error: {e}")
+            self.logger.error(f"Unexpected error during manual deployment: {e}")
+            messagebox.showerror("Critical Error", f"Deployment crashed:\n{e}")
         finally:
-            self.root.after(0, self.manual_complete)
+            self.root.after(0, lambda: self.manual_complete(success_count, failure_count))
 
     def direct_upload_to_till(self, till_ip):
-        transport = connect_transport(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, logger=self.logger)
-        if not transport:
-            return False
-
         try:
+            transport = connect_transport(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, logger=self.logger)
+            if not transport:
+                return False
+
             transport.sock.settimeout(TIMEOUT_TRANSFER)
             sftp = paramiko.SFTPClient.from_transport(transport)
 
             try:
-                sftp.stat(TILL_DEST_BASE)
-            except FileNotFoundError:
-                parent = '/home/posuser/ETPSuite'
+                # Ensure destination path exists
                 try:
-                    sftp.stat(parent)
+                    sftp.stat(TILL_DEST_BASE)
+                    self.logger.debug(f"Destination exists: {TILL_DEST_BASE}")
                 except FileNotFoundError:
-                    sftp.mkdir(parent)
-                sftp.mkdir(TILL_DEST_BASE)
+                    parent = '/home/posuser/ETPSuite'
+                    try:
+                        sftp.stat(parent)
+                    except FileNotFoundError:
+                        sftp.mkdir(parent)
+                        self.logger.info(f"Created parent directory: {parent}")
+                    sftp.mkdir(TILL_DEST_BASE)
+                    self.logger.info(f"Created destination: {TILL_DEST_BASE}")
 
-            upload_folder(sftp, SOURCE_FOLDER, TILL_DEST_BASE, self.logger)
-            return True
+                # Upload folder
+                upload_folder(sftp, SOURCE_FOLDER, TILL_DEST_BASE, self.logger)
+                self.logger.info(f"Upload completed successfully to {till_ip}")
+                return True
+
+            except paramiko.SSHException as ssh_e:
+                self.logger.error(f"SSH error during upload to {till_ip}: {ssh_e}")
+                return False
+            except socket.timeout:
+                self.logger.error(f"Timeout during file transfer to {till_ip}")
+                return False
+            except PermissionError:
+                self.logger.error(f"Permission denied on {till_ip}")
+                return False
+            except Exception as e:
+                self.logger.error(f"Upload error on {till_ip}: {e}")
+                return False
+            finally:
+                try:
+                    sftp.close()
+                except:
+                    pass
+                try:
+                    transport.close()
+                except:
+                    pass
+
         except Exception as e:
-            self.logger.error(f"Direct upload failed to {till_ip}: {e}")
+            self.logger.error(f"Failed to connect/upload to {till_ip}: {e}")
             return False
-        finally:
-            try:
-                sftp.close()
-                transport.close()
-            except:
-                pass
 
-    def manual_complete(self):
+    def manual_complete(self, success, failure):
         self.is_manual = False
         self.enable_all_buttons()
         self.stop_btn.config(state=tk.DISABLED)
         self.progress['value'] = 100
         self.progress_label.config(text="100% Complete")
-        self.status_label.config(text="Manual Deployment Completed")
-        messagebox.showinfo("Success", "Manual deployment completed!\nCheck log for details.")
+        self.status_label.config(text="Manual Deployment Finished")
 
-    def deployment_complete(self):
-        self.is_deploying = False
-        self.enable_all_buttons()
-        self.stop_btn.config(state=tk.DISABLED)
-        self.status_label.config(text="Deployment Completed")
-        self.results_btn.config(state=tk.NORMAL)
-        messagebox.showinfo("Success", "Full deployment completed!")
+        summary = f"Manual Deployment Complete!\n\n" \
+                  f"Successful: {success}\n" \
+                  f"Failed: {failure}\n\n" \
+                  f"Check log for details."
+        messagebox.showinfo("Deployment Summary", summary)
+        self.logger.info(f"Manual deployment finished: {success} success, {failure} failed")
 
-    def open_results(self):
-        if self.excel_log and os.path.exists(self.excel_log):
-            os.startfile(self.excel_log)
-
-    # Placeholder for start_reattempt (to avoid AttributeError)
-    def start_reattempt(self):
-        messagebox.showinfo("Info", "Reattempt feature is not implemented in this version.")
-
-# Helper functions
+# Helper functions with enhanced error handling
 def is_port_reachable(host, port, timeout, logger):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(timeout)
     try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
         result = sock.connect_ex((host, port))
         sock.close()
         return result == 0
-    except Exception:
+    except socket.timeout:
+        logger.error(f"Connection timeout to {host}:{port}")
+        return False
+    except Exception as e:
+        logger.error(f"Port check failed for {host}:{port} - {e}")
         return False
 
 def connect_transport(host, username, password, timeout, port=22, logger=None):
     if not logger:
         logger = logging.getLogger("deployment_tool")
+
     logger.info(f"Connecting to {host}:{port} as {username}...")
 
     if not is_port_reachable(host, port, timeout, logger):
-        logger.error(f"Cannot reach {host}:{port}")
+        logger.error(f"Host unreachable: {host}:{port}")
         return None
 
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
         sock.connect((host, port))
+
         transport = paramiko.Transport(sock)
         transport.start_client(timeout=timeout)
         transport.auth_password(username, password)
         transport.set_keepalive(30)
-        logger.info(f"Successfully authenticated to {host}")
+
+        logger.info(f"Authentication successful: {host}")
         return transport
+
+    except paramiko.AuthenticationException:
+        logger.error(f"Authentication failed for {username}@{host}")
+        return None
+    except paramiko.SSHException as ssh_e:
+        logger.error(f"SSH error connecting to {host}: {ssh_e}")
+        return None
+    except socket.timeout:
+        logger.error(f"Connection timeout to {host}")
+        return None
     except Exception as e:
-        logger.error(f"SSH connection failed to {host}: {e}")
+        logger.error(f"Unexpected connection error to {host}: {e}")
         return None
 
 def upload_folder(sftp, local_dir, remote_dir, logger):
@@ -397,13 +394,13 @@ def upload_folder(sftp, local_dir, remote_dir, logger):
 
     try:
         sftp.mkdir(remote_dir)
-        logger.info(f"Created remote folder: {remote_dir}")
+        logger.info(f"Created remote directory: {remote_dir}")
     except IOError:
-        logger.debug(f"Remote folder already exists: {remote_dir}")
+        logger.debug(f"Remote directory already exists: {remote_dir}")
 
     for item in os.listdir(local_dir):
         local_path = os.path.join(local_dir, item)
-        remote_path = remote_dir.rstrip('/') + '/' + item
+        remote_path = f"{remote_dir}/{item}".replace('\\', '/')
         try:
             if os.path.isdir(local_path):
                 upload_folder(sftp, local_path, remote_path, logger)
@@ -411,10 +408,14 @@ def upload_folder(sftp, local_dir, remote_dir, logger):
                 sftp.put(local_path, remote_path)
                 logger.debug(f"Uploaded: {item}")
         except Exception as e:
-            logger.error(f"Failed to upload {item}: {e}")
+            logger.error(f"Failed to upload {item} to {remote_path}: {e}")
             raise
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = DeploymentGUI(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = DeploymentGUI(root)
+        root.mainloop()
+    except Exception as e:
+        messagebox.showerror("Fatal Error", f"Application failed to start:\n{e}")
+        print(f"Fatal Error: {e}")
