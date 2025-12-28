@@ -106,7 +106,7 @@ class DeploymentGUI:
                                   bg='red', fg='white', font=("Arial", 10, "bold"), width=18, height=2, state=tk.DISABLED)
         self.stop_btn.pack(side=tk.LEFT, padx=15)
 
-        # FIXED: Reattempt button - now properly created and packed
+        # Reattempt button - now properly defined and packed
         self.reattempt_btn = tk.Button(button_frame, text="Reattempt Failed Tills", command=self.start_reattempt,
                                        bg='blue', fg='white', font=("Arial", 10, "bold"), width=22, height=2)
         self.reattempt_btn.pack(side=tk.LEFT, padx=15)
@@ -232,8 +232,8 @@ class DeploymentGUI:
 
     def run_deployment(self, config_file):
         self.logger.info("Full deployment started from config file...")
-        # Add your full deploy_to_host logic here if needed
-        # Placeholder for now
+        # Placeholder - add your full deployment logic here if needed
+        # For now, it just completes immediately
         self.root.after(0, self.deployment_complete)
 
     def start_manual(self):
@@ -352,6 +352,10 @@ class DeploymentGUI:
     def open_results(self):
         if self.excel_log and os.path.exists(self.excel_log):
             os.startfile(self.excel_log)
+
+    # Placeholder for start_reattempt (to avoid AttributeError)
+    def start_reattempt(self):
+        messagebox.showinfo("Info", "Reattempt feature is not implemented in this version.")
 
 # Helper functions
 def is_port_reachable(host, port, timeout, logger):
