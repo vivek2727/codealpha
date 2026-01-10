@@ -29,7 +29,7 @@ class DeploymentGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("ETP Deployment Tool v3.2")
-        self.root.geometry("750x650")
+        self.root.geometry("750x600")
         self.root.resizable(False, False)
 
         self.source_folder = tk.StringVar(value=DEFAULT_SOURCE_FOLDER)
@@ -48,25 +48,28 @@ class DeploymentGUI:
         self.setup_logging()
 
     def setup_ui(self):
+        # Source Folder
         tk.Label(self.root, text="Source Folder:").pack(pady=8)
         source_frame = tk.Frame(self.root)
         source_frame.pack(pady=5, fill=tk.X, padx=20)
         tk.Entry(source_frame, textvariable=self.source_folder, width=60).pack(side=tk.LEFT, fill=tk.X, expand=True)
         tk.Button(source_frame, text="Browse", command=self.browse_source).pack(side=tk.RIGHT, padx=5)
 
+        # Config File
         tk.Label(self.root, text="Config File (Full Mode):").pack(pady=8)
         config_frame = tk.Frame(self.root)
         config_frame.pack(pady=5, fill=tk.X, padx=20)
         tk.Entry(config_frame, textvariable=self.config_file, width=60).pack(side=tk.LEFT, fill=tk.X, expand=True)
         tk.Button(config_frame, text="Browse", command=self.browse_config).pack(side=tk.RIGHT, padx=5)
 
+        # Manual / Restart Section
         manual_frame = tk.LabelFrame(self.root, text="Manual / Restart Failed", padx=15, pady=15)
         manual_frame.pack(pady=15, fill=tk.X, padx=20)
 
-        tk.Label(manual_frame, text="Host IP (for Manual):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        tk.Label(manual_frame, text="Host IP (Manual only):").grid(row=0, column=0, sticky=tk.W, pady=5)
         tk.Entry(manual_frame, textvariable=self.manual_host_ip, width=35).grid(row=0, column=1, padx=10, pady=5)
 
-        tk.Label(manual_frame, text="Tills (comma sep, e.g. 1,3,4):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        tk.Label(manual_frame, text="Tills (comma sep):").grid(row=1, column=0, sticky=tk.W, pady=5)
         tk.Entry(manual_frame, textvariable=self.manual_till_nums, width=35).grid(row=1, column=1, padx=10, pady=5)
 
         btn_frame = tk.Frame(manual_frame)
@@ -76,17 +79,17 @@ class DeploymentGUI:
                                     bg='purple', fg='white', width=15)
         self.manual_btn.pack(side=tk.LEFT, padx=10)
 
-        self.restart_failed_btn = tk.Button(btn_frame, text="Restart Failed Tills", command=self.start_restart_failed,
-                                            bg='orange', fg='white', width=18)
-        self.restart_failed_btn.pack(side=tk.LEFT, padx=10)
-
         # Main Action Buttons
         main_btn_frame = tk.Frame(self.root)
-        main_btn_frame.pack(pady=10)
+        main_btn_frame.pack(pady=15)
 
         self.start_btn = tk.Button(main_btn_frame, text="Start Full Deployment", command=self.start_full_deployment,
                                    bg='green', fg='white', width=20)
         self.start_btn.pack(side=tk.LEFT, padx=10)
+
+        self.restart_failed_btn = tk.Button(main_btn_frame, text="Restart on Failed Tills", command=self.start_restart_failed,
+                                            bg='orange', fg='white', width=22)
+        self.restart_failed_btn.pack(side=tk.LEFT, padx=10)
 
         self.stop_btn = tk.Button(main_btn_frame, text="Stop", command=self.stop_operation,
                                   bg='red', fg='white', width=10, state=tk.DISABLED)
@@ -104,7 +107,7 @@ class DeploymentGUI:
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X, pady=(0,10), padx=10)
 
         # Log
-        tk.Label(self.root, text="Log Output:", font=("Arial", 10, "bold")).pack(anchor=tk.W, padx=20, pady=5)
+        tk.Label(self.root, text="Live Log:", font=("Arial", 10, "bold")).pack(anchor=tk.W, padx=20, pady=5)
         self.log_text = scrolledtext.ScrolledText(self.root, height=10, font=("Consolas", 9))
         self.log_text.pack(pady=5, padx=20, fill=tk.BOTH, expand=True)
 
@@ -114,13 +117,18 @@ class DeploymentGUI:
                             format='%(asctime)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
 
+        # Custom GUI handler
         class GuiHandler(logging.Handler):
+            def __init__(self, text_widget):
+                super().__init__()
+                self.text_widget = text_widget
+
             def emit(self, record):
                 msg = self.format(record)
-                self.log_text.insert(tk.END, msg + '\n')
-                self.log_text.see(tk.END)
+                self.text_widget.insert(tk.END, msg + '\n')
+                self.text_widget.see(tk.END)
 
-        gui_handler = GuiHandler()
+        gui_handler = GuiHandler(self.log_text)
         gui_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         self.logger.addHandler(gui_handler)
 
@@ -136,14 +144,14 @@ class DeploymentGUI:
 
     def disable_buttons(self):
         self.start_btn.config(state=tk.DISABLED)
-        self.manual_btn.config(state=tk.DISABLED)
         self.restart_failed_btn.config(state=tk.DISABLED)
+        self.manual_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.NORMAL)
 
     def enable_buttons(self):
         self.start_btn.config(state=tk.NORMAL)
-        self.manual_btn.config(state=tk.NORMAL)
         self.restart_failed_btn.config(state=tk.NORMAL)
+        self.manual_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.DISABLED)
 
     def start_full_deployment(self):
@@ -231,7 +239,7 @@ class DeploymentGUI:
 
         try:
             df = pd.read_excel(self.last_results_file)
-            failed = df[df['Status'] == 'Failure'][['HostIP', 'TillIP']].drop_duplicates()
+            failed = df[df['Status'] == 'Failure'][['TillIP']].drop_duplicates()
             if failed.empty:
                 messagebox.showinfo("Info", "No failed tills found in the last log.")
                 return
@@ -239,7 +247,7 @@ class DeploymentGUI:
             messagebox.showerror("Error", f"Cannot read last log:\n{e}")
             return
 
-        failed_tills = [row['TillIP'] for _, row in failed.iterrows()]
+        failed_tills = failed['TillIP'].tolist()
 
         self.total_tasks = len(failed_tills)
         self.completed_tasks = 0
@@ -252,9 +260,9 @@ class DeploymentGUI:
         self.progress_label.config(text="0% Complete")
         self.status_label.config(text=f"Restarting {len(failed_tills)} failed tills...")
 
-        self.manual_thread = Thread(target=self.run_restart_failed, args=(failed_tills,))
-        self.manual_thread.daemon = True
-        self.manual_thread.start()
+        self.restart_thread = Thread(target=self.run_restart_failed, args=(failed_tills,))
+        self.restart_thread.daemon = True
+        self.restart_thread.start()
 
     def run_restart_failed(self, failed_tills):
         reattempt_results = []
@@ -277,16 +285,11 @@ class DeploymentGUI:
 
         # Save reattempt log
         if reattempt_results:
-            reattempt_file = f"reattempt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            reattempt_file = f"reattempt_failed_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
             pd.DataFrame(reattempt_results).to_excel(reattempt_file, index=False)
             self.logger.info(f"Reattempt log saved: {reattempt_file}")
 
         self.root.after(0, self.operation_complete)
-
-    def start_manual(self):
-        # Same as before — direct manual deploy
-        # (omitted for brevity, keep your existing implementation)
-        pass  # Add your manual logic here if needed
 
     def direct_upload_to_till(self, till_ip):
         transport = connect_transport(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, logger=self.logger)
@@ -294,7 +297,9 @@ class DeploymentGUI:
             return False
 
         try:
+            transport.sock.settimeout(TIMEOUT_TRANSFER)
             sftp = paramiko.SFTPClient.from_transport(transport)
+
             try:
                 sftp.stat(TILL_DEST_BASE)
             except FileNotFoundError:
@@ -314,6 +319,9 @@ class DeploymentGUI:
             except:
                 pass
 
+    def start_manual(self):
+        messagebox.showinfo("Manual", "Manual direct deployment is not implemented yet in this version.")
+
     def operation_complete(self):
         self.is_running = False
         self.enable_buttons()
@@ -327,15 +335,14 @@ class DeploymentGUI:
         self.stop_event.set()
         self.status_label.config(text="Stopping...")
 
-# Helper functions (unchanged from your working version)
+# Helper functions
 def connect_transport(host, username, password, timeout, port=22, logger=None):
     if not logger:
         logger = logging.getLogger()
     logger.info(f"Connecting to {host}...")
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(timeout)
     try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
         sock.connect((host, port))
         transport = paramiko.Transport(sock)
         transport.start_client(timeout=timeout)
