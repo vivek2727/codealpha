@@ -1,12 +1,15 @@
+PS D:\VS\Deploy_new> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe d:/VS/Deploy_new/deploy_etp_manual.py
+Exception in Tkinter callback
 Traceback (most recent call last):
-  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 415, in <module>
-    app = DeploymentGUI(root)
-  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 56, in __init__
-    self.setup_ui()
-    ~~~~~~~~~~~~~^^
-  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 110, in setup_ui
-    self.reattempt_btn = tk.Button(button_frame, text="Reattempt Failed Tills", command=self.start_reattempt,
-                                                                                        ^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'DeploymentGUI' object has no attribute 'start_reattempt'
-PS D:\VS\Deploy_new>
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 2068, in __call__
+    return self.func(*args)
+           ~~~~~~~~~^^^^^^^
+  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 165, in start_full_deployment
+    self.status_label.config(text="Full Deployment Running...")
+    ^^^^^^^^^^^^^^^^^
+AttributeError: 'DeploymentGUI' object has no attribute 'status_label'
+
+
+
+
 
