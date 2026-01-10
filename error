@@ -1,13 +1,29 @@
-2026-01-10 11:46:41,886 - INFO - Deploying to host 10.0.70.12 (2 tills)
-2026-01-10 11:46:41,887 - INFO - Deploying to host 10.0.94.12 (1 tills)
-2026-01-10 11:46:41,888 - INFO - Deploying to host 10.0.190.12 (6 tills)
-2026-01-10 11:46:41,889 - INFO - Deploying to host 10.0.194.12 (4 tills)
-2026-01-10 11:46:41,894 - INFO - Connecting to 10.0.70.12...
-2026-01-10 11:46:41,894 - INFO - Connecting to 10.0.94.12...
-2026-01-10 11:46:41,906 - INFO - Connecting to 10.0.190.12...
-2026-01-10 11:46:41,910 - INFO - Connecting to 10.0.194.12...
-2026-01-10 11:46:41,920 - ERROR - Connect failed 10.0.94.12: [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions
-2026-01-10 11:46:41,920 - ERROR - Connect failed 10.0.70.12: [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions
-2026-01-10 11:46:41,925 - ERROR - Connect failed 10.0.190.12: [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions
-2026-01-10 11:46:41,927 - ERROR - Connect failed 10.0.194.12: [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions
-2026-01-10 11:46:41,960 - INFO - Operation completed.
+2026-01-10 12:16:32,432 - INFO - Deploying to host 10.0.70.12 (2 tills)
+2026-01-10 12:16:32,434 - INFO - Deploying to host 10.0.94.12 (1 tills)
+2026-01-10 12:16:32,436 - INFO - Deploying to host 10.0.190.12 (3 tills)
+2026-01-10 12:16:32,437 - INFO - Connecting to 10.0.70.12...
+2026-01-10 12:16:32,438 - INFO - Deploying to host 10.0.194.12 (2 tills)
+2026-01-10 12:16:32,453 - INFO - Connecting to 10.0.94.12...
+2026-01-10 12:16:32,455 - INFO - Connecting to 10.0.190.12...
+2026-01-10 12:16:32,460 - INFO - Connecting to 10.0.194.12...
+2026-01-10 12:16:32,504 - INFO - Connected (version 2.0, client OpenSSH_8.9p1)
+2026-01-10 12:16:32,519 - INFO - Connected (version 2.0, client OpenSSH_8.9p1)
+2026-01-10 12:16:32,561 - INFO - Connected (version 2.0, client OpenSSH_8.9p1)
+2026-01-10 12:16:32,617 - INFO - Connected (version 2.0, client OpenSSH_8.9p1)
+2026-01-10 12:16:32,646 - INFO - Auth banner: b'===========================================================================\nPROPRIETARY INFORMATION\nAll content of this system and its associated sub-systems are PROPRIETARY\nINFORMATION and remain the sole and exclusive property of M/s Trent Ltd.\nThis system may be accessed and used by authorized personnel only.\nAuthorized users may only perform authorized activities and may not exceed\nthe limits of such authorization. Disclosure of information found in this\nsystem for any unauthorized use is *STRICTLY PROHIBITED*. All activities on\ncan result in disciplinary action or criminal prosecution.\n===========================================================================\n===========================================================================\n\n\n        \n'
+2026-01-10 12:16:32,647 - INFO - Authentication (password) successful!
+2026-01-10 12:16:32,648 - ERROR - Socket exception: An operation was attempted on something that is not a socket (10038)
+2026-01-10 12:16:32,651 - ERROR - Host 10.0.94.12 upload failed: 
+2026-01-10 12:16:32,696 - INFO - Auth banner: b'===========================================================================\nPROPRIETARY INFORMATION\nAll content of this system and its associated sub-systems are PROPRIETARY\nINFORMATION and remain the sole and exclusive property of M/s Trent Ltd.\nThis system may be accessed and used by authorized personnel only.\nAuthorized users may only perform authorized activities and may not exceed\nthe limits of such authorization. Disclosure of information found in this\nsystem for any unauthorized use is *STRICTLY PROHIBITED*. All activities on\ncan result in disciplinary action or criminal prosecution.\n===========================================================================\n===========================================================================\n\n\n        \n'
+2026-01-10 12:16:32,697 - INFO - Authentication (password) successful!
+2026-01-10 12:16:32,698 - ERROR - Socket exception: An operation was attempted on something that is not a socket (10038)
+2026-01-10 12:16:32,699 - ERROR - Host 10.0.70.12 upload failed: 
+2026-01-10 12:16:32,862 - INFO - Auth banner: b'===========================================================================\nPROPRIETARY INFORMATION\nAll content of this system and its associated sub-systems are PROPRIETARY\nINFORMATION and remain the sole and exclusive property of M/s Trent Ltd.\nThis system may be accessed and used by authorized personnel only.\nAuthorized users may only perform authorized activities and may not exceed\nthe limits of such authorization. Disclosure of information found in this\nsystem for any unauthorized use is *STRICTLY PROHIBITED*. All activities on\ncan result in disciplinary action or criminal prosecution.\n===========================================================================\n===========================================================================\n\n\n        \n'
+2026-01-10 12:16:32,863 - INFO - Authentication (password) successful!
+2026-01-10 12:16:32,864 - ERROR - Socket exception: An operation was attempted on something that is not a socket (10038)
+2026-01-10 12:16:32,865 - ERROR - Host 10.0.194.12 upload failed: 
+2026-01-10 12:16:33,143 - INFO - Auth banner: b'===========================================================================\nPROPRIETARY INFORMATION\nAll content of this system and its associated sub-systems are PROPRIETARY\nINFORMATION and remain the sole and exclusive property of M/s Trent Ltd.\nThis system may be accessed and used by authorized personnel only.\nAuthorized users may only perform authorized activities and may not exceed\nthe limits of such authorization. Disclosure of information found in this\nsystem for any unauthorized use is *STRICTLY PROHIBITED*. All activities on\ncan result in disciplinary action or criminal prosecution.\n===========================================================================\n===========================================================================\n\n\n        \n'
+2026-01-10 12:16:33,144 - INFO - Authentication (password) successful!
+2026-01-10 12:16:33,145 - ERROR - Socket exception: An operation was attempted on something that is not a socket (10038)
+2026-01-10 12:16:33,146 - ERROR - Host 10.0.190.12 upload failed: 
+2026-01-10 12:16:33,159 - INFO - Operation completed.
