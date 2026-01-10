@@ -1,58 +1,13 @@
-PS D:\VS\Deploy_new> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe d:/VS/Deploy_new/deploy_etp_manual.py
-Exception in Tkinter callback
-Traceback (most recent call last):
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 2068, in __call__
-    return self.func(*args)
-           ~~~~~~~~~^^^^^^^
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 862, in callit
-    func(*args)
-    ~~~~^^^^^^^
-  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 201, in <lambda>
-    self.root.after(0, lambda: self.update_progress(self.completed_tasks))
-                               ^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'DeploymentGUI' object has no attribute 'update_progress'
-Exception in Tkinter callback
-Traceback (most recent call last):
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 2068, in __call__
-    return self.func(*args)
-           ~~~~~~~~~^^^^^^^
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 862, in callit
-    func(*args)
-    ~~~~^^^^^^^
-  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 201, in <lambda>
-    self.root.after(0, lambda: self.update_progress(self.completed_tasks))
-                               ^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'DeploymentGUI' object has no attribute 'update_progress'
-Exception in Tkinter callback
-Traceback (most recent call last):
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 2068, in __call__
-    return self.func(*args)
-           ~~~~~~~~~^^^^^^^
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 862, in callit  
-    func(*args)
-    ~~~~^^^^^^^
-  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 201, in <lambda>
-    self.root.after(0, lambda: self.update_progress(self.completed_tasks))
-                               ^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'DeploymentGUI' object has no attribute 'update_progress'
-Exception in Tkinter callback
-Traceback (most recent call last):
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 2068, in __call__
-    return self.func(*args)
-           ~~~~~~~~~^^^^^^^
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 862, in callit  
-    func(*args)
-    ~~~~^^^^^^^
-  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 201, in <lambda>
-    self.root.after(0, lambda: self.update_progress(self.completed_tasks))
-                               ^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'DeploymentGUI' object has no attribute 'update_progress'
-Traceback (most recent call last):
-  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 374, in <module>
-    root.mainloop()
-    ~~~~~~~~~~~~~^^
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 1599, in mainloop
-    self.tk.mainloop(n)
-    ~~~~~~~~~~~~~~~~^^^
-KeyboardInterrupt
-PS D:\VS\Deploy_new> 
+2026-01-10 11:46:41,886 - INFO - Deploying to host 10.0.70.12 (2 tills)
+2026-01-10 11:46:41,887 - INFO - Deploying to host 10.0.94.12 (1 tills)
+2026-01-10 11:46:41,888 - INFO - Deploying to host 10.0.190.12 (6 tills)
+2026-01-10 11:46:41,889 - INFO - Deploying to host 10.0.194.12 (4 tills)
+2026-01-10 11:46:41,894 - INFO - Connecting to 10.0.70.12...
+2026-01-10 11:46:41,894 - INFO - Connecting to 10.0.94.12...
+2026-01-10 11:46:41,906 - INFO - Connecting to 10.0.190.12...
+2026-01-10 11:46:41,910 - INFO - Connecting to 10.0.194.12...
+2026-01-10 11:46:41,920 - ERROR - Connect failed 10.0.94.12: [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions
+2026-01-10 11:46:41,920 - ERROR - Connect failed 10.0.70.12: [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions
+2026-01-10 11:46:41,925 - ERROR - Connect failed 10.0.190.12: [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions
+2026-01-10 11:46:41,927 - ERROR - Connect failed 10.0.194.12: [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions
+2026-01-10 11:46:41,960 - INFO - Operation completed.
