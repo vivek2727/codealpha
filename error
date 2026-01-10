@@ -7,25 +7,52 @@ Traceback (most recent call last):
   File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 862, in callit
     func(*args)
     ~~~~^^^^^^^
-  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 324, in operation_complete
-    self.logger.info("Operation completed.")
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\logging\__init__.py", line 1519, in info
-    self._log(INFO, msg, args, **kwargs)
-    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\logging\__init__.py", line 1664, in _log
-    self.handle(record)
-    ~~~~~~~~~~~^^^^^^^^
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\logging\__init__.py", line 1680, in handle
-    self.callHandlers(record)
-    ~~~~~~~~~~~~~~~~~^^^^^^^^
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\logging\__init__.py", line 1736, in callHandlers
-    hdlr.handle(record)
-    ~~~~~~~~~~~^^^^^^^^
-  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\logging\__init__.py", line 1026, in handle 
-    self.emit(record)
-    ~~~~~~~~~^^^^^^^^
-  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 120, in emit
-    self.log_text.insert(tk.END, msg + '\n')
-    ^^^^^^^^^^^^^
-AttributeError: 'GuiHandler' object has no attribute 'log_text'
+  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 201, in <lambda>
+    self.root.after(0, lambda: self.update_progress(self.completed_tasks))
+                               ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DeploymentGUI' object has no attribute 'update_progress'
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 2068, in __call__
+    return self.func(*args)
+           ~~~~~~~~~^^^^^^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 862, in callit
+    func(*args)
+    ~~~~^^^^^^^
+  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 201, in <lambda>
+    self.root.after(0, lambda: self.update_progress(self.completed_tasks))
+                               ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DeploymentGUI' object has no attribute 'update_progress'
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 2068, in __call__
+    return self.func(*args)
+           ~~~~~~~~~^^^^^^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 862, in callit  
+    func(*args)
+    ~~~~^^^^^^^
+  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 201, in <lambda>
+    self.root.after(0, lambda: self.update_progress(self.completed_tasks))
+                               ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DeploymentGUI' object has no attribute 'update_progress'
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 2068, in __call__
+    return self.func(*args)
+           ~~~~~~~~~^^^^^^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 862, in callit  
+    func(*args)
+    ~~~~^^^^^^^
+  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 201, in <lambda>
+    self.root.after(0, lambda: self.update_progress(self.completed_tasks))
+                               ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DeploymentGUI' object has no attribute 'update_progress'
+Traceback (most recent call last):
+  File "d:\VS\Deploy_new\deploy_etp_manual.py", line 374, in <module>
+    root.mainloop()
+    ~~~~~~~~~~~~~^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 1599, in mainloop
+    self.tk.mainloop(n)
+    ~~~~~~~~~~~~~~~~^^^
+KeyboardInterrupt
+PS D:\VS\Deploy_new> 
