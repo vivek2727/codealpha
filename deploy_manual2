@@ -8,7 +8,8 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from threading import Thread, Event
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import freeze_support
 
 # Configuration
 DEFAULT_SOURCE_FOLDER = r'C:\Source\ETPStoreFrontV5.5'
@@ -21,14 +22,18 @@ TILL_DEST_BASE = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'
 HOST_DEST = '/home/linuxadmin/ETPStoreFrontV5.5'
 TIMEOUT_CONNECT = 5
 TIMEOUT_TRANSFER = 10
-MAX_WORKERS = 5
+MAX_WORKERS = 5  # Can increase to 8-12 for more hosts
 
 SOURCE_FOLDER = DEFAULT_SOURCE_FOLDER
+
+# IMPORTANT: Required for multiprocessing on Windows
+if __name__ == '__main__':
+    freeze_support()
 
 class DeploymentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("ETP Deployment Tool v3.2")
+        self.root.title("ETP Deployment Tool v3.3 - Multiprocess")
         self.root.geometry("750x600")
         self.root.resizable(False, False)
 
@@ -48,35 +53,32 @@ class DeploymentGUI:
         self.setup_logging()
 
     def setup_ui(self):
-        # Source Folder
         tk.Label(self.root, text="Source Folder:").pack(pady=8)
         source_frame = tk.Frame(self.root)
         source_frame.pack(pady=5, fill=tk.X, padx=20)
         tk.Entry(source_frame, textvariable=self.source_folder, width=60).pack(side=tk.LEFT, fill=tk.X, expand=True)
         tk.Button(source_frame, text="Browse", command=self.browse_source).pack(side=tk.RIGHT, padx=5)
 
-        # Config File
         tk.Label(self.root, text="Config File (Full Mode):").pack(pady=8)
         config_frame = tk.Frame(self.root)
         config_frame.pack(pady=5, fill=tk.X, padx=20)
         tk.Entry(config_frame, textvariable=self.config_file, width=60).pack(side=tk.LEFT, fill=tk.X, expand=True)
         tk.Button(config_frame, text="Browse", command=self.browse_config).pack(side=tk.RIGHT, padx=5)
 
-        # Manual Section
         manual_frame = tk.LabelFrame(self.root, text="Manual Deployment", padx=15, pady=15)
         manual_frame.pack(pady=15, fill=tk.X, padx=20)
 
         tk.Label(manual_frame, text="Host IP:").grid(row=0, column=0, sticky=tk.W, pady=5)
         tk.Entry(manual_frame, textvariable=self.manual_host_ip, width=35).grid(row=0, column=1, padx=10, pady=5)
 
-        tk.Label(manual_frame, text="Tills (1,3,4):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        tk.Label(manual_frame, text="Tills (comma sep):").grid(row=1, column=0, sticky=tk.W, pady=5)
         tk.Entry(manual_frame, textvariable=self.manual_till_nums, width=35).grid(row=1, column=1, padx=10, pady=5)
 
         self.manual_btn = tk.Button(manual_frame, text="Manual Deploy", command=self.start_manual,
                                     bg='purple', fg='white', width=15)
         self.manual_btn.grid(row=2, column=0, columnspan=2, pady=10)
 
-        # Main Buttons
+        # Main Action Buttons
         main_btn_frame = tk.Frame(self.root)
         main_btn_frame.pack(pady=15)
 
@@ -181,42 +183,51 @@ class DeploymentGUI:
         self.stop_event.clear()
         self.progress['value'] = 0
         self.progress_label.config(text="0% Complete")
-        self.status_label.config(text="Full Deployment Running...")
+        self.status_label.config(text="Full Deployment Running (Multiprocess)...")
 
         self.deployment_thread = Thread(target=self.run_full_deployment, args=(hosts,))
         self.deployment_thread.daemon = True
         self.deployment_thread.start()
 
     def run_full_deployment(self, hosts):
-        def process_host(ip, max_till):
+        def process_host(args):
+            ip, max_till = args
             if self.stop_event.is_set():
-                return
+                return False, f"Stopped: {ip}"
             try:
                 success = self.deploy_to_host(ip, max_till)
-                self.completed_tasks += 1
-                self.root.after(0, lambda: self.update_progress(self.completed_tasks))
+                return success, f"Success: {ip}" if success else f"Failed: {ip}"
             except Exception as e:
-                self.logger.error(f"Host {ip} failed: {e}")
+                return False, f"Error {ip}: {e}"
 
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            executor.map(lambda args: process_host(*args), hosts)
+        with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = [executor.submit(process_host, (ip, tills)) for ip, tills in hosts]
+            for future in as_completed(futures):
+                if self.stop_event.is_set():
+                    break
+                success, msg = future.result()
+                self.completed_tasks += 1
+                self.logger.info(msg)
+                self.root.after(0, lambda: self.update_progress(self.completed_tasks))
 
         self.root.after(0, self.operation_complete)
 
     def deploy_to_host(self, host_ip, max_till):
-        self.logger.info(f"Deploying to host {host_ip} ({max_till} tills)")
-        transport = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT, logger=self.logger)
+        # This runs in a separate process — no shared state issues
+        logger = logging.getLogger(__name__)
+        logger.info(f"Deploying to host {host_ip} ({max_till} tills)")
+
+        transport = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT)
         if not transport:
             return False
 
         try:
             sftp = paramiko.SFTPClient.from_transport(transport)
-            upload_folder(sftp, SOURCE_FOLDER, HOST_DEST, self.logger)
-            self.logger.info(f"Host upload success: {host_ip}")
-            self.last_results_file = self.excel_log  # For restart
+            upload_folder(sftp, SOURCE_FOLDER, HOST_DEST, logger)
+            logger.info(f"Host upload success: {host_ip}")
             return True
         except Exception as e:
-            self.logger.error(f"Host {host_ip} upload failed: {e}")
+            logger.error(f"Host {host_ip} upload failed: {e}")
             return False
         finally:
             try:
@@ -232,99 +243,6 @@ class DeploymentGUI:
         self.progress['value'] = percent
         self.progress_label.config(text=f"{int(percent)}% Complete")
 
-    def start_restart_failed(self):
-        if self.is_running:
-            messagebox.showwarning("Warning", "Another operation is running.")
-            return
-
-        if not self.last_results_file or not os.path.exists(self.last_results_file):
-            messagebox.showerror("Error", "No previous deployment log found.\nRun full deployment first.")
-            return
-
-        try:
-            df = pd.read_excel(self.last_results_file)
-            failed = df[df['Status'] == 'Failure'][['TillIP']].drop_duplicates()
-            if failed.empty:
-                messagebox.showinfo("Info", "No failed tills in the last log.")
-                return
-        except Exception as e:
-            messagebox.showerror("Error", f"Cannot read log:\n{e}")
-            return
-
-        failed_tills = failed['TillIP'].tolist()
-
-        self.total_tasks = len(failed_tills)
-        self.completed_tasks = 0
-        self.is_running = True
-        self.disable_buttons()
-        self.stop_btn.config(state=tk.NORMAL)
-        self.stop_event.clear()
-        self.progress['value'] = 0
-        self.progress_label.config(text="0% Complete")
-        self.status_label.config(text=f"Restarting {len(failed_tills)} failed tills...")
-
-        self.restart_thread = Thread(target=self.run_restart_failed, args=(failed_tills,))
-        self.restart_thread.daemon = True
-        self.restart_thread.start()
-
-    def run_restart_failed(self, failed_tills):
-        reattempt_results = []
-
-        for till_ip in failed_tills:
-            if self.stop_event.is_set():
-                self.logger.info("Restart stopped by user.")
-                break
-
-            self.logger.info(f"Restarting: {till_ip}")
-            success = self.direct_upload_to_till(till_ip)
-
-            status = "Reattempt Success" if success else "Reattempt Failure"
-            self.logger.info(f"{till_ip} → {status}")
-
-            reattempt_results.append({'TillIP': till_ip, 'Status': status})
-
-            self.completed_tasks += 1
-            self.root.after(0, lambda: self.update_progress(self.completed_tasks))
-
-        # Save reattempt log
-        if reattempt_results:
-            reattempt_file = f"reattempt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-            pd.DataFrame(reattempt_results).to_excel(reattempt_file, index=False)
-            self.logger.info(f"Reattempt results saved: {reattempt_file}")
-
-        self.root.after(0, self.operation_complete)
-
-    def direct_upload_to_till(self, till_ip):
-        transport = connect_transport(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, logger=self.logger)
-        if not transport:
-            return False
-
-        try:
-            transport.sock.settimeout(TIMEOUT_TRANSFER)
-            sftp = paramiko.SFTPClient.from_transport(transport)
-
-            try:
-                sftp.stat(TILL_DEST_BASE)
-            except FileNotFoundError:
-                parent = os.path.dirname(TILL_DEST_BASE)
-                sftp.mkdir(parent)
-                sftp.mkdir(TILL_DEST_BASE)
-
-            upload_folder(sftp, SOURCE_FOLDER, TILL_DEST_BASE, self.logger)
-            return True
-        except Exception as e:
-            self.logger.error(f"Upload failed to {till_ip}: {e}")
-            return False
-        finally:
-            try:
-                sftp.close()
-                transport.close()
-            except:
-                pass
-
-    def start_manual(self):
-        messagebox.showinfo("Manual", "Manual direct deployment not implemented yet.")
-
     def operation_complete(self):
         self.is_running = False
         self.enable_buttons()
@@ -338,10 +256,12 @@ class DeploymentGUI:
         self.stop_event.set()
         self.status_label.config(text="Stopping...")
 
-# Helpers
-def connect_transport(host, username, password, timeout, port=22, logger=None):
-    if not logger:
-        logger = logging.getLogger()
+    def start_manual(self):
+        messagebox.showinfo("Manual", "Manual direct deployment not implemented yet.")
+
+# Helper functions (must be top-level for multiprocessing)
+def connect_transport(host, username, password, timeout, port=22):
+    logger = logging.getLogger(__name__)
     logger.info(f"Connecting to {host}...")
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -371,7 +291,7 @@ def upload_folder(sftp, local_dir, remote_dir, logger):
         else:
             sftp.put(local, remote)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     root = tk.Tk()
     app = DeploymentGUI(root)
     root.mainloop()
