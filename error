@@ -8,7 +8,7 @@ Traceback (most recent call last):
   File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\reduction.py", line 51, in dumps
     cls(buf, protocol).dump(obj)
     ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-AttributeError: Can't get local object 'DeploymentGUI.run_full_deployment.<locals>.process_host'
+AttributeError: Can't get local object 'DeploymentGUI.run_full_deployment.<locals>.process_host_wrapper'
 """
 
 The above exception was the direct cause of the following exception:
@@ -20,7 +20,7 @@ Traceback (most recent call last):
   File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\threading.py", line 992, in run
     self._target(*self._args, **self._kwargs)
     ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "d:\VS\Deploy_new\deploy_etp_multiprocess.py", line 213, in run_full_deployment
+  File "d:\VS\Deploy_new\deploy_etp_multiprocess.py", line 238, in run_full_deployment
     success, msg = future.result()
                    ~~~~~~~~~~~~~^^
   File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 449, in
@@ -36,4 +36,4 @@ Traceback (most recent call last):
  dumps
     cls(buf, protocol).dump(obj)
     ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-AttributeError: Can't get local object 'DeploymentGUI.run_full_deployment.<locals>.process_host'
+AttributeError: Can't get local object 'DeploymentGUI.run_full_deployment.<locals>.process_host_wrapper'
