@@ -1,12 +1,39 @@
 PS D:\VS\Deploy_new> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe d:/VS/Deploy_new/deploy_etp_multiprocess.py
+Exception in thread Thread-1 (run_full_deployment):
+concurrent.futures.process._RemoteTraceback: 
+"""
 Traceback (most recent call last):
-  File "d:\VS\Deploy_new\deploy_etp_multiprocess.py", line 296, in <module>
-    app = DeploymentGUI(root)
-  File "d:\VS\Deploy_new\deploy_etp_multiprocess.py", line 52, in __init__
-    self.setup_ui()
-    ~~~~~~~~~~~~~^^
-  File "d:\VS\Deploy_new\deploy_etp_multiprocess.py", line 89, in setup_ui
-    self.restart_failed_btn = tk.Button(main_btn_frame, text="Restart on Failed Tills", command=self.start_restart_failed,
-                                                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'DeploymentGUI' object has no attribute 'start_restart_failed'
-PS D:\VS\Deploy_new> 
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\queues.py", line 262, in _feed
+    obj = _ForkingPickler.dumps(obj)
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\reduction.py", line 51, in dumps
+    cls(buf, protocol).dump(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+AttributeError: Can't get local object 'DeploymentGUI.run_full_deployment.<locals>.process_host'
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\threading.py", line 1041, in _bootstrap_inner
+    self.run()
+    ~~~~~~~~^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\threading.py", line 992, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "d:\VS\Deploy_new\deploy_etp_multiprocess.py", line 213, in run_full_deployment
+    success, msg = future.result()
+                   ~~~~~~~~~~~~~^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 449, in
+ result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 401, in
+ __get_result
+    raise self._exception
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\queues.py", line 262, in _feed
+    obj = _ForkingPickler.dumps(obj)
+  File "C:\Users\FBSSL50001237\AppData\Local\Programs\Python\Python313\Lib\multiprocessing\reduction.py", line 51, in
+ dumps
+    cls(buf, protocol).dump(obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+AttributeError: Can't get local object 'DeploymentGUI.run_full_deployment.<locals>.process_host'
