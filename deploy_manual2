@@ -24,7 +24,7 @@ TILL_DEST_BASE = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'
 HOST_DEST = '/home/linuxadmin/ETPStoreFrontV5.5'
 TIMEOUT_CONNECT = 5
 TIMEOUT_TRANSFER = 10
-MAX_WORKERS = 5  # Increase if your PC can handle it
+MAX_WORKERS = 5  # Safe default - increase to 8-10 if needed
 
 SOURCE_FOLDER = DEFAULT_SOURCE_FOLDER
 
@@ -33,16 +33,17 @@ if __name__ == '__main__':
     freeze_support()
 
 # ========================
-# TOP-LEVEL PROCESS-SAFE FUNCTION
+# TOP-LEVEL WORKER FUNCTION (MUST BE GLOBAL)
 # ========================
 def deploy_to_host_process(host_ip, max_till):
     """
-    This function runs in a separate process.
-    It must not rely on any instance variables or local closures.
+    This function runs in a separate process - it must be top-level!
     """
     logger = logging.getLogger('deploy_process')
-    logger.info(f"[PROCESS] Starting deployment to host {host_ip} ({max_till} tills)")
+    logger.info(f"[PROCESS] Deploying to {host_ip} with {max_till} tills")
 
+    transport = None
+    sftp = None
     try:
         transport = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT)
         if not transport:
@@ -51,18 +52,18 @@ def deploy_to_host_process(host_ip, max_till):
 
         sftp = paramiko.SFTPClient.from_transport(transport)
         upload_folder(sftp, SOURCE_FOLDER, HOST_DEST, logger)
-        logger.info(f"[PROCESS] Upload success for host {host_ip}")
+        logger.info(f"[PROCESS] Upload success for {host_ip}")
         return True, f"Success: {host_ip}"
 
     except Exception as e:
-        logger.error(f"[PROCESS] Error on host {host_ip}: {e}")
+        logger.error(f"[PROCESS] Error on {host_ip}: {str(e)}")
         return False, f"Failed: {host_ip} - {str(e)}"
 
     finally:
         try:
-            if 'sftp' in locals():
+            if sftp:
                 sftp.close()
-            if 'transport' in locals():
+            if transport:
                 transport.close()
         except Exception as cleanup_e:
             logger.warning(f"Cleanup error: {cleanup_e}")
@@ -225,11 +226,8 @@ class DeploymentGUI:
         self.deployment_thread.start()
 
     def run_full_deployment(self, hosts):
-        def process_host_wrapper(args):
-            return deploy_to_host_process(*args)
-
         with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = [executor.submit(process_host_wrapper, (ip, max_till)) for ip, max_till in hosts]
+            futures = [executor.submit(deploy_to_host_process, ip, max_till) for ip, max_till in hosts]
 
             for future in as_completed(futures):
                 if self.stop_event.is_set():
@@ -263,13 +261,13 @@ class DeploymentGUI:
         self.status_label.config(text="Stopping...")
 
     def start_restart_failed(self):
-        messagebox.showinfo("Info", "Restart on failed tills feature - coming soon in next update.")
+        messagebox.showinfo("Info", "Restart on failed tills - feature coming soon.")
 
     def start_manual(self):
-        messagebox.showinfo("Manual", "Manual deployment - coming soon.")
+        messagebox.showinfo("Manual", "Manual deployment - feature coming soon.")
 
 # ========================
-# PROCESS-SAFE HELPERS (MUST BE TOP-LEVEL)
+# PROCESS-SAFE HELPERS
 # ========================
 def connect_transport(host, username, password, timeout, port=22):
     logger = logging.getLogger('deploy_process')
