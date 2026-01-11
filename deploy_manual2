@@ -24,7 +24,7 @@ TILL_DEST_BASE = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'
 HOST_DEST = '/home/linuxadmin/ETPStoreFrontV5.5'
 TIMEOUT_CONNECT = 5
 TIMEOUT_TRANSFER = 10
-MAX_WORKERS = 5  # Safe default - increase to 8-10 if needed
+MAX_WORKERS = 5  # Safe default - increase to 8-12 if your PC can handle
 
 SOURCE_FOLDER = DEFAULT_SOURCE_FOLDER
 
@@ -33,32 +33,67 @@ if __name__ == '__main__':
     freeze_support()
 
 # ========================
-# TOP-LEVEL WORKER FUNCTION (MUST BE GLOBAL)
+# TOP-LEVEL PROCESS-SAFE FUNCTIONS
+# These MUST be defined at module level for Windows multiprocessing
 # ========================
+def connect_transport(host, username, password, timeout, port=22):
+    logger = logging.getLogger('deploy_process')
+    logger.info(f"[PROCESS] Connecting to {host}...")
+    sock = None
+    transport = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((host, port))
+        transport = paramiko.Transport(sock)
+        transport.start_client(timeout=timeout)
+        transport.auth_password(username, password)
+        transport.set_keepalive(30)
+        return transport
+    except Exception as e:
+        logger.error(f"[PROCESS] Connect failed {host}: {e}")
+        return None
+    finally:
+        if sock:
+            try:
+                sock.close()
+            except:
+                pass
+
+def upload_folder(sftp, local_dir, remote_dir, logger):
+    try:
+        sftp.mkdir(remote_dir)
+    except:
+        pass
+    for item in os.listdir(local_dir):
+        local = os.path.join(local_dir, item)
+        remote = f"{remote_dir}/{item}"
+        if os.path.isdir(local):
+            upload_folder(sftp, local, remote, logger)
+        else:
+            sftp.put(local, remote)
+            logger.debug(f"[PROCESS] Uploaded {item}")
+
 def deploy_to_host_process(host_ip, max_till):
     """
-    This function runs in a separate process - it must be top-level!
+    Worker function for parallel deployment - MUST be top-level
     """
     logger = logging.getLogger('deploy_process')
-    logger.info(f"[PROCESS] Deploying to {host_ip} with {max_till} tills")
+    logger.info(f"[PROCESS] Deploying to {host_ip} ({max_till} tills)")
 
-    transport = None
+    transport = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT)
+    if not transport:
+        return False, f"Connection failed: {host_ip}"
+
     sftp = None
     try:
-        transport = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT)
-        if not transport:
-            logger.error(f"[PROCESS] Connection failed to {host_ip}")
-            return False, f"Connection failed: {host_ip}"
-
         sftp = paramiko.SFTPClient.from_transport(transport)
         upload_folder(sftp, SOURCE_FOLDER, HOST_DEST, logger)
         logger.info(f"[PROCESS] Upload success for {host_ip}")
         return True, f"Success: {host_ip}"
-
     except Exception as e:
-        logger.error(f"[PROCESS] Error on {host_ip}: {str(e)}")
+        logger.error(f"[PROCESS] Upload failed for {host_ip}: {e}")
         return False, f"Failed: {host_ip} - {str(e)}"
-
     finally:
         try:
             if sftp:
@@ -66,7 +101,7 @@ def deploy_to_host_process(host_ip, max_till):
             if transport:
                 transport.close()
         except Exception as cleanup_e:
-            logger.warning(f"Cleanup error: {cleanup_e}")
+            logger.warning(f"[PROCESS] Cleanup error: {cleanup_e}")
 
 # ========================
 # GUI CLASS
@@ -74,7 +109,7 @@ def deploy_to_host_process(host_ip, max_till):
 class DeploymentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("ETP Deployment Tool v3.4 - ProcessPool Fixed")
+        self.root.title("ETP Deployment Tool v3.5 - ProcessPool Final")
         self.root.geometry("750x650")
         self.root.resizable(False, False)
 
@@ -261,47 +296,93 @@ class DeploymentGUI:
         self.status_label.config(text="Stopping...")
 
     def start_restart_failed(self):
-        messagebox.showinfo("Info", "Restart on failed tills - feature coming soon.")
+        if self.is_running:
+            messagebox.showwarning("Warning", "Another operation is running.")
+            return
+
+        if not self.last_results_file or not os.path.exists(self.last_results_file):
+            messagebox.showerror("Error", "No previous deployment log found.\nRun full deployment first.")
+            return
+
+        try:
+            df = pd.read_excel(self.last_results_file)
+            failed = df[df['Status'] == 'Failure']['TillIP'].drop_duplicates().tolist()
+            if not failed:
+                messagebox.showinfo("Info", "No failed tills found.")
+                return
+        except Exception as e:
+            messagebox.showerror("Error", f"Cannot read last log:\n{e}")
+            return
+
+        self.total_tasks = len(failed)
+        self.completed_tasks = 0
+        self.is_running = True
+        self.disable_buttons()
+        self.stop_btn.config(state=tk.NORMAL)
+        self.stop_event.clear()
+        self.progress['value'] = 0
+        self.progress_label.config(text="0% Complete")
+        self.status_label.config(text=f"Restarting {len(failed)} failed tills...")
+
+        self.restart_thread = Thread(target=self.run_restart_failed, args=(failed,))
+        self.restart_thread.daemon = True
+        self.restart_thread.start()
+
+    def run_restart_failed(self, failed_tills):
+        reattempt_results = []
+
+        for till_ip in failed_tills:
+            if self.stop_event.is_set():
+                self.logger.info("Restart stopped by user.")
+                break
+
+            success = self.direct_upload_to_till(till_ip)
+            status = "Reattempt Success" if success else "Reattempt Failure"
+            reattempt_results.append({'TillIP': till_ip, 'Status': status})
+
+            self.completed_tasks += 1
+            self.root.after(0, lambda: self.update_progress(self.completed_tasks))
+
+        if reattempt_results:
+            reattempt_file = f"reattempt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            pd.DataFrame(reattempt_results).to_excel(reattempt_file, index=False)
+            self.logger.info(f"Reattempt results saved: {reattempt_file}")
+
+        self.root.after(0, self.operation_complete)
+
+    def direct_upload_to_till(self, till_ip):
+        transport = connect_transport(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT)
+        if not transport:
+            return False
+
+        try:
+            transport.sock.settimeout(TIMEOUT_TRANSFER)
+            sftp = paramiko.SFTPClient.from_transport(transport)
+
+            try:
+                sftp.stat(TILL_DEST_BASE)
+            except FileNotFoundError:
+                parent = os.path.dirname(TILL_DEST_BASE)
+                sftp.mkdir(parent)
+                sftp.mkdir(TILL_DEST_BASE)
+
+            upload_folder(sftp, SOURCE_FOLDER, TILL_DEST_BASE, self.logger)
+            return True
+        except Exception as e:
+            self.logger.error(f"Till {till_ip} failed: {e}")
+            return False
+        finally:
+            try:
+                sftp.close()
+                transport.close()
+            except:
+                pass
 
     def start_manual(self):
-        messagebox.showinfo("Manual", "Manual deployment - feature coming soon.")
-
-# ========================
-# PROCESS-SAFE HELPERS
-# ========================
-def connect_transport(host, username, password, timeout, port=22):
-    logger = logging.getLogger('deploy_process')
-    logger.info(f"[PROCESS] Connecting to {host}...")
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
-        sock.connect((host, port))
-        transport = paramiko.Transport(sock)
-        transport.start_client(timeout=timeout)
-        transport.auth_password(username, password)
-        transport.set_keepalive(30)
-        return transport
-    except Exception as e:
-        logger.error(f"[PROCESS] Connect failed {host}: {e}")
-        return None
-    finally:
-        if 'sock' in locals():
-            sock.close()
-
-def upload_folder(sftp, local_dir, remote_dir, logger):
-    try:
-        sftp.mkdir(remote_dir)
-    except:
-        pass
-    for item in os.listdir(local_dir):
-        local = os.path.join(local_dir, item)
-        remote = f"{remote_dir}/{item}"
-        if os.path.isdir(local):
-            upload_folder(sftp, local, remote, logger)
-        else:
-            sftp.put(local, remote)
+        messagebox.showinfo("Manual", "Manual deployment not implemented yet.")
 
 if __name__ == '__main__':
+    freeze_support()
     root = tk.Tk()
     app = DeploymentGUI(root)
     root.mainloop()
