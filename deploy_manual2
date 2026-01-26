@@ -4,6 +4,7 @@ import shutil
 import paramiko
 import socket
 import pandas as pd
+from stat import S_ISDIR
 from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
@@ -22,9 +23,167 @@ TILL_DEST_BASE = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'  # As per requiremen
 HOST_DEST = '/home/linuxadmin/ETPStoreFrontV5.5'  # Fixed for hosts
 TIMEOUT_CONNECT = 3  # Seconds for connection attempts
 TIMEOUT_TRANSFER = 6  # Approximate for transfer operations (paramiko timeouts)
+MAX_WORKERS = 5  # Number of concurrent hosts to process (adjust based on network capacity)
 
 SOURCE_FOLDER = DEFAULT_SOURCE_FOLDER  # Global, set dynamically
 
+# Required for multiprocessing on Windows
+if __name__ == '__main__':
+    freeze_support()
+
+# ========================
+# TOP-LEVEL PROCESS-SAFE FUNCTIONS
+# ========================
+def connect_transport(host, username, password, timeout, port=22):
+    logger = logging.getLogger('deploy_process')
+    logger.info(f"[PROCESS] Connecting to {host}...")
+    sock = None
+    transport = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((host, port))
+        transport = paramiko.Transport(sock)
+        transport.start_client(timeout=timeout)
+        transport.auth_password(username, password)
+        transport.set_keepalive(30)
+        return transport
+    except Exception as e:
+        logger.error(f"[PROCESS] Connect failed {host}: {e}")
+        return None
+    finally:
+        if sock:
+            try:
+                sock.close()
+            except:
+                pass
+
+def upload_folder(sftp, local_dir, remote_dir, logger):
+    try:
+        sftp.mkdir(remote_dir)
+    except:
+        pass
+    for item in os.listdir(local_dir):
+        local = os.path.join(local_dir, item)
+        remote = f"{remote_dir}/{item}"
+        if os.path.isdir(local):
+            upload_folder(sftp, local, remote, logger)
+        else:
+            sftp.put(local, remote)
+
+def deploy_to_host_process(host_ip, max_till):
+    logger = logging.getLogger('deploy_process')
+    logger.info(f"[PROCESS] Deploying to {host_ip} ({max_till} tills)")
+
+    transport = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT)
+    if not transport:
+        return False, f"Connection failed: {host_ip}"
+
+    sftp = None
+    try:
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        upload_folder(sftp, SOURCE_FOLDER, HOST_DEST, logger)
+        logger.info(f"[PROCESS] Upload success for {host_ip}")
+        return True, f"Success: {host_ip}"
+    except Exception as e:
+        logger.error(f"[PROCESS] Upload failed {host_ip}: {e}")
+        return False, f"Failed: {host_ip} - {str(e)}"
+    finally:
+        try:
+            if sftp:
+                sftp.close()
+            if transport:
+                transport.close()
+        except:
+            pass
+
+def is_port_reachable(host, port, timeout, logger):
+    """Check if the host's port is reachable within timeout."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
+    try:
+        result = sock.connect_ex((host, port))
+        sock.close()
+        if result == 0:
+            logger.debug(f"Port {port} on {host} is reachable")
+            return True
+        else:
+            logger.warning(f"Port {port} on {host} is not reachable (error code: {result})")
+            return False
+    except socket.timeout:
+        logger.error(f"Timeout while checking port {port} on {host}")
+        return False
+    except Exception as e:
+        logger.error(f"Error checking port {port} on {host}: {str(e)}")
+        return False
+
+def copy_dir_between_sfpts(sftp_src, sftp_dest, src_dir, dst_dir, logger):
+    """Recursively copy directory contents from one SFTP to another. Overwrites existing files; does not delete extras."""
+    try:
+        attrs = sftp_src.listdir_attr(src_dir)
+    except Exception as e:
+        logger.error(f"Cannot list source directory {src_dir}: {str(e)}")
+        return
+
+    try:
+        sftp_dest.stat(dst_dir)
+        logger.debug(f"Destination {dst_dir} exists")
+    except FileNotFoundError:
+        sftp_dest.mkdir(dst_dir)
+        logger.info(f"Created destination directory: {dst_dir}")
+    except Exception as e:
+        logger.error(f"Cannot access/create destination {dst_dir}: {str(e)}")
+        return
+
+    for attr in attrs:
+        if attr.filename.startswith('.'):
+            continue  # Skip hidden files
+        src_item = f"{src_dir}/{attr.filename}"
+        dst_item = f"{dst_dir}/{attr.filename}"
+        try:
+            if S_ISDIR(attr.st_mode):
+                copy_dir_between_sfpts(sftp_src, sftp_dest, src_item, dst_item, logger)
+            else:
+                # Stream copy without temp files; overwrites if exists
+                with sftp_src.open(src_item, 'rb') as fr:
+                    with sftp_dest.open(dst_item, 'wb') as fw:
+                        shutil.copyfileobj(fr, fw)
+                logger.debug(f"Copied {attr.filename}")
+        except Exception as e:
+            logger.error(f"Failed to copy {attr.filename}: {str(e)}")
+            # Continue to next item
+
+def delete_remote_folder(sftp, remote_dir, logger):
+    """Recursively delete a remote directory and its contents."""
+    try:
+        attrs = sftp.listdir_attr(remote_dir)
+    except Exception as e:
+        logger.warning(f"Cannot list remote directory {remote_dir} for deletion: {str(e)}")
+        return
+
+    for attr in attrs:
+        if attr.filename.startswith('.'):
+            continue  # Skip hidden files
+        item = f"{remote_dir}/{attr.filename}"
+        try:
+            if S_ISDIR(attr.st_mode):
+                delete_remote_folder(sftp, item, logger)
+            else:
+                sftp.remove(item)
+                logger.debug(f"Deleted file: {attr.filename}")
+        except Exception as e:
+            logger.error(f"Failed to delete {item}: {str(e)}")
+            # Continue to next item
+
+    try:
+        sftp.rmdir(remote_dir)
+        logger.info(f"Deleted directory: {remote_dir}")
+    except Exception as e:
+        logger.error(f"Failed to delete directory {remote_dir}: {str(e)}")
+
+# ========================
+# GUI CLASS
+# ========================
 class DeploymentGUI:
     def __init__(self, root):
         self.root = root
@@ -141,7 +300,7 @@ class DeploymentGUI:
             messagebox.showerror("Error", "Source folder does not exist!")
             return
         if not os.path.exists(config_path):
-            messagebox.showerror("Error", "Config file not exist!")
+            messagebox.showerror("Error", "Config file does not exist!")
             return
 
         global SOURCE_FOLDER
@@ -195,8 +354,10 @@ class DeploymentGUI:
                 self.logger.error(f"Failed to read config file {config_file}: {str(e)}")
                 return
 
+            hosts = [(row['HostIP'].strip(), row['MaxTill']) for _, row in df_config.iterrows()]
+
             with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                futures = [executor.submit(deploy_to_host_process, row['HostIP'].strip(), row['MaxTill']) for _, row in df_config.iterrows()]
+                futures = [executor.submit(deploy_to_host_process, ip, max_till) for ip, max_till in hosts]
 
                 for future in as_completed(futures):
                     if self.stop_event.is_set():
@@ -222,21 +383,6 @@ class DeploymentGUI:
             self.logger.error(f"Deployment failed: {str(e)}")
         finally:
             self.root.after(0, self.deployment_complete)
-
-    def deployment_complete(self):
-        self.is_deploying = False
-        self.start_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.reattempt_btn.config(state=tk.NORMAL)  # Re-enable reattempt after deployment
-        self.progress.stop()
-        self.status_label.config(text="Deployment Complete" if not self.stop_event.is_set() else "Deployment Stopped")
-        self.results_btn.config(state=tk.NORMAL)
-        if not self.stop_event.is_set():
-            messagebox.showinfo("Complete", "Deployment finished. Check log for details.")
-
-    def open_results(self):
-        if self.excel_log and os.path.exists(self.excel_log):
-            os.startfile(self.excel_log)
 
     def start_reattempt(self):
         if self.is_reattempting or not self.last_results_file or not os.path.exists(self.last_results_file):
@@ -361,175 +507,9 @@ class DeploymentGUI:
         if not self.stop_event.is_set():
             messagebox.showinfo("Complete", "Reattempt finished. Check log for details.")
 
-    def deployment_complete(self):
-        self.is_deploying = False
-        self.start_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.reattempt_btn.config(state=tk.NORMAL)  # Re-enable reattempt after deployment
-        self.progress.stop()
-        self.status_label.config(text="Deployment Complete" if not self.stop_event.is_set() else "Deployment Stopped")
-        self.results_btn.config(state=tk.NORMAL)
-        if not self.stop_event.is_set():
-            messagebox.showinfo("Complete", "Deployment finished. Check log for details.")
-
-    def open_results(self):
-        if self.excel_log and os.path.exists(self.excel_log):
-            os.startfile(self.excel_log)
-
-def is_port_reachable(host, port, timeout, logger):
-    """Check if the host's port is reachable within timeout."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(timeout)
-    try:
-        result = sock.connect_ex((host, port))
-        sock.close()
-        if result == 0:
-            logger.debug(f"Port {port} on {host} is reachable")
-            return True
-        else:
-            logger.warning(f"Port {port} on {host} is not reachable (error code: {result})")
-            return False
-    except socket.timeout:
-        logger.error(f"Timeout while checking port {port} on {host}")
-        return False
-    except Exception as e:
-        logger.error(f"Error checking port {port} on {host}: {str(e)}")
-        return False
-
-def connect_transport(host, username, password, timeout, port=22, logger=None):
-    if logger is None:
-        logger = logging.getLogger(__name__)
-    logger.info(f"Attempting to connect to {host}:{port} as {username} (timeout: {timeout}s)")
-
-    # Pre-check port reachability
-    if not is_port_reachable(host, port, timeout, logger):
-        logger.error(f"Cannot reach {host} on port {port}. Check network, firewall, or SSH service.")
-        return None
-
-    sock = None
-    transport = None
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
-        logger.debug("TCP connect initiated...")
-        sock.connect((host, port))
-        logger.debug("TCP connect successful. Starting SSH handshake...")
-
-        transport = paramiko.Transport(sock)
-        transport.banner_timeout = timeout
-        transport.packetizer.REKEY_BYTES = 5000000  # Reduce rekey to avoid long waits
-        transport.start_client(timeout=timeout)
-
-        logger.debug("SSH handshake started. Authenticating...")
-        transport.auth_password(username, password)
-        transport.set_keepalive(30)
-        logger.info(f"Successfully connected and authenticated to {host} as {username}")
-        return transport
-
-    except paramiko.AuthenticationException:
-        logger.error(f"Authentication failed for {username}@{host}. Check username/password.")
-        return None
-    except paramiko.SSHException as e:
-        logger.error(f"SSH error connecting to {host}: {str(e)}")
-        return None
-    except socket.timeout:
-        logger.error(f"Timeout during connection/handshake to {host} after {timeout}s")
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error connecting to {host} as {username}: {str(e)}")
-        return None
-    finally:
-        if sock and not transport:
-            sock.close()
-
-def upload_folder(sftp, local_dir, remote_dir, logger):
-    """Recursively upload local folder contents to remote directory."""
-    if not os.path.isdir(local_dir):
-        raise Exception(f"Local folder not found: {local_dir}")
-
-    try:
-        sftp.mkdir(remote_dir)
-        logger.info(f"Created remote directory: {remote_dir}")
-    except IOError:
-        logger.debug(f"Remote directory already exists: {remote_dir}")
-
-    for item in os.listdir(local_dir):
-        local_item = os.path.join(local_dir, item)
-        remote_item = f"{remote_dir}/{item}"
-        try:
-            if os.path.isdir(local_item):
-                upload_folder(sftp, local_item, remote_item, logger)
-            else:
-                sftp.put(local_item, remote_item)
-                logger.debug(f"Uploaded file: {item}")
-        except Exception as e:
-            logger.error(f"Failed to upload {item}: {str(e)}")
-            raise  # Re-raise to fail the whole operation
-
-def copy_dir_between_sfpts(sftp_src, sftp_dest, src_dir, dst_dir, logger):
-    """Recursively copy directory contents from one SFTP to another. Overwrites existing files; does not delete extras."""
-    try:
-        attrs = sftp_src.listdir_attr(src_dir)
-    except Exception as e:
-        logger.error(f"Cannot list source directory {src_dir}: {str(e)}")
-        return
-
-    try:
-        sftp_dest.stat(dst_dir)
-        logger.debug(f"Destination {dst_dir} exists")
-    except FileNotFoundError:
-        sftp_dest.mkdir(dst_dir)
-        logger.info(f"Created destination directory: {dst_dir}")
-    except Exception as e:
-        logger.error(f"Cannot access/create destination {dst_dir}: {str(e)}")
-        return
-
-    for attr in attrs:
-        if attr.filename.startswith('.'):
-            continue  # Skip hidden files
-        src_item = f"{src_dir}/{attr.filename}"
-        dst_item = f"{dst_dir}/{attr.filename}"
-        try:
-            if S_ISDIR(attr.st_mode):
-                copy_dir_between_sfpts(sftp_src, sftp_dest, src_item, dst_item, logger)
-            else:
-                # Stream copy without temp files; overwrites if exists
-                with sftp_src.open(src_item, 'rb') as fr:
-                    with sftp_dest.open(dst_item, 'wb') as fw:
-                        shutil.copyfileobj(fr, fw)
-                logger.debug(f"Copied {attr.filename}")
-        except Exception as e:
-            logger.error(f"Failed to copy {attr.filename}: {str(e)}")
-            # Continue to next item
-
-def delete_remote_folder(sftp, remote_dir, logger):
-    """Recursively delete a remote directory and its contents."""
-    try:
-        attrs = sftp.listdir_attr(remote_dir)
-    except Exception as e:
-        logger.warning(f"Cannot list remote directory {remote_dir} for deletion: {str(e)}")
-        return
-
-    for attr in attrs:
-        if attr.filename.startswith('.'):
-            continue  # Skip hidden files
-        item = f"{remote_dir}/{attr.filename}"
-        try:
-            if S_ISDIR(attr.st_mode):
-                delete_remote_folder(sftp, item, logger)
-            else:
-                sftp.remove(item)
-                logger.debug(f"Deleted file: {attr.filename}")
-        except Exception as e:
-            logger.error(f"Failed to delete {item}: {str(e)}")
-            # Continue to next item
-
-    try:
-        sftp.rmdir(remote_dir)
-        logger.info(f"Deleted directory: {remote_dir}")
-    except Exception as e:
-        logger.error(f"Failed to delete directory {remote_dir}: {str(e)}")
-
+# ========================
+# MAIN ENTRY POINT
+# ========================
 if __name__ == '__main__':
     freeze_support()
     root = tk.Tk()
