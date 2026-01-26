@@ -1,36 +1,12 @@
-Process SpawnProcess-3:
+PS D:\VS\Deploy_new> & C:/Users/FBSSL50001237/AppData/Local/Programs/Python/Python313/python.exe d:/VS/Deploy_new/deploy_etp_multiprocess.py
 Traceback (most recent call last):
-  File "multiprocessing\process.py", line 313, in _bootstrap
-  File "multiprocessing\process.py", line 108, in run
-  File "concurrent\futures\process.py", line 242, in _process_worker
-  File "multiprocessing\queues.py", line 120, in get
-AttributeError: Can't get attribute 'deploy_to_host_process' on <module '__main__' from 'C:\\Users\\FB6199~1\\AppData\\Local\\Temp\\245\\_MEI406922\\deploy_etp_multiprocess.py'>
-Process SpawnProcess-4:
-Traceback (most recent call last):
-  File "multiprocessing\process.py", line 313, in _bootstrap
-  File "multiprocessing\process.py", line 108, in run
-  File "concurrent\futures\process.py", line 242, in _process_worker
-  File "multiprocessing\queues.py", line 120, in get
-AttributeError: Can't get attribute 'deploy_to_host_process' on <module '__main__' from 'C:\\Users\\FB6199~1\\AppData\\Local\\Temp\\245\\_MEI406922\\deploy_etp_multiprocess.py'>
-Process SpawnProcess-2:
-Traceback (most recent call last):
-  File "multiprocessing\process.py", line 313, in _bootstrap
-  File "multiprocessing\process.py", line 108, in run
-  File "concurrent\futures\process.py", line 242, in _process_worker
-  File "multiprocessing\queues.py", line 120, in get
-AttributeError: Can't get attribute 'deploy_to_host_process' on <module '__main__' from 'C:\\Users\\FB6199~1\\AppData\\Local\\Temp\\245\\_MEI406922\\deploy_etp_multiprocess.py'>
-Process SpawnProcess-1:
-Traceback (most recent call last):
-  File "multiprocessing\process.py", line 313, in _bootstrap
-  File "multiprocessing\process.py", line 108, in run
-  File "concurrent\futures\process.py", line 242, in _process_worker
-  File "multiprocessing\queues.py", line 120, in get
-AttributeError: Can't get attribute 'deploy_to_host_process' on <module '__main__' from 'C:\\Users\\FB6199~1\\AppData\\Local\\Temp\\245\\_MEI406922\\deploy_etp_multiprocess.py'>
-Exception in thread Thread-1 (run_full_deployment):
-Traceback (most recent call last):
-  File "threading.py", line 1041, in _bootstrap_inner
-  File "threading.py", line 992, in run
-  File "deploy_etp_multiprocess.py", line 271, in run_full_deployment
-  File "concurrent\futures\_base.py", line 449, in result
-  File "concurrent\futures\_base.py", line 401, in __get_result
-concurrent.futures.process.BrokenProcessPool: A process in the process pool was terminated abruptly while the future was running or pending.
+  File "d:\VS\Deploy_new\deploy_etp_multiprocess.py", line 516, in <module>
+    app = DeploymentGUI(root)
+  File "d:\VS\Deploy_new\deploy_etp_multiprocess.py", line 206, in __init__
+    self.setup_ui()
+    ~~~~~~~~~~~~~^^
+  File "d:\VS\Deploy_new\deploy_etp_multiprocess.py", line 255, in setup_ui
+    self.results_btn = tk.Button(self.root, text="Open Results Excel", command=self.open_results, state=tk.DISABLED)
+                                                                               ^^^^^^^^^^^^^^^^^
+AttributeError: 'DeploymentGUI' object has no attribute 'open_results'
+PS D:\VS\Deploy_new> 
