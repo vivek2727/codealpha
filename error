@@ -1,36 +1,22 @@
-Process SpawnProcess-1:
-Process SpawnProcess-4:
-Traceback (most recent call last):
-  File "multiprocessing\process.py", line 313, in _bootstrap
-  File "multiprocessing\process.py", line 108, in run
-  File "concurrent\futures\process.py", line 242, in _process_worker
-  File "multiprocessing\queues.py", line 120, in get
-AttributeError: Can't get attribute 'deploy_to_host_process' on <module '__main__' from 'C:\\Users\\FB6199~1\\AppData\\Local\\Temp\\356\\_MEI1471602\\deploy_etp_multiprocess.py'>
-Traceback (most recent call last):
-  File "multiprocessing\process.py", line 313, in _bootstrap
-  File "multiprocessing\process.py", line 108, in run
-  File "concurrent\futures\process.py", line 242, in _process_worker
-  File "multiprocessing\queues.py", line 120, in get
-AttributeError: Can't get attribute 'deploy_to_host_process' on <module '__main__' from 'C:\\Users\\FB6199~1\\AppData\\Local\\Temp\\356\\_MEI1471602\\deploy_etp_multiprocess.py'>
-Process SpawnProcess-2:
-Traceback (most recent call last):
-  File "multiprocessing\process.py", line 313, in _bootstrap
-  File "multiprocessing\process.py", line 108, in run
-  File "concurrent\futures\process.py", line 242, in _process_worker
-  File "multiprocessing\queues.py", line 120, in get
-AttributeError: Can't get attribute 'deploy_to_host_process' on <module '__main__' from 'C:\\Users\\FB6199~1\\AppData\\Local\\Temp\\356\\_MEI1471602\\deploy_etp_multiprocess.py'>
-Process SpawnProcess-3:
-Traceback (most recent call last):
-  File "multiprocessing\process.py", line 313, in _bootstrap
-  File "multiprocessing\process.py", line 108, in run
-  File "concurrent\futures\process.py", line 242, in _process_worker
-  File "multiprocessing\queues.py", line 120, in get
-AttributeError: Can't get attribute 'deploy_to_host_process' on <module '__main__' from 'C:\\Users\\FB6199~1\\AppData\\Local\\Temp\\356\\_MEI1471602\\deploy_etp_multiprocess.py'>
-Exception in thread Thread-1 (run_full_deployment):
-Traceback (most recent call last):
-  File "threading.py", line 1041, in _bootstrap_inner
-  File "threading.py", line 992, in run
-  File "deploy_etp_multiprocess.py", line 350, in run_full_deployment
-  File "concurrent\futures\_base.py", line 449, in result
-  File "concurrent\futures\_base.py", line 401, in __get_result
-concurrent.futures.process.BrokenProcessPool: A process in the process pool was terminated abruptly while the future was running or pending.
+HostIP	TillIP	Status	Host_Server_Status
+10.0.70.12	Till_1	Host Upload Failed	N/A
+10.0.70.12	Till_2	Host Upload Failed	N/A
+10.0.94.12	Till_1	Host Upload Failed	N/A
+10.0.190.12	Till_1	Host Upload Failed	N/A
+10.0.190.12	Till_2	Host Upload Failed	N/A
+10.0.190.12	Till_3	Host Upload Failed	N/A
+10.0.194.12	Till_1	Host Upload Failed	N/A
+10.0.194.12	Till_2	Host Upload Failed	N/A
+
+
+PS D:\VS\Deploy_new> & D:/VS/Deploy_new/env/Scripts/Activate.ps1
+& : File D:\VS\Deploy_new\env\Scripts\Activate.ps1 cannot be loaded because running scripts is disabled on 
+this system. For more information, see about_Execution_Policies at 
+https:/go.microsoft.com/fwlink/?LinkID=135170.
+At line:1 char:3
++ & D:/VS/Deploy_new/env/Scripts/Activate.ps1
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : SecurityError: (:) [], PSSecurityException
+    + FullyQualifiedErrorId : UnauthorizedAccess
+PS D:\VS\Deploy_new> & D:/VS/Deploy_new/env/Scripts/python.exe d:/VS/Deploy_new/ETP_Deployment.py
+
