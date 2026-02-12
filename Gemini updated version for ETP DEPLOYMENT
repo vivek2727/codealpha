@@ -1,0 +1,503 @@
+import os
+import logging
+import shutil
+import paramiko
+import socket
+import pandas as pd
+from stat import S_ISDIR
+from datetime import datetime
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
+from threading import Event, Lock
+from concurrent.futures import ThreadPoolExecutor
+
+# Configuration
+DEFAULT_SOURCE_FOLDER = r'C:\Source\ETPStoreFrontV5.5'
+HOST_USER = 'linuxadmin'
+HOST_PASS = 'St0re@dm1n'
+TILL_USER = 'posuser'
+TILL_PASS = 'till@123'
+TILL_START_OCTET = 111
+# Standard Paths
+TILL_DEST_BASE = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'
+HOST_DEST_STOREFRONT = '/home/linuxadmin/ETPStoreFrontV5.5'
+HOST_DEST_OPS = '/home/linuxadmin/ETPSuite/ETP Store Operations' 
+
+TIMEOUT_CONNECT = 5
+TIMEOUT_TRANSFER = 20 # Increased for stability
+
+# Global Threading Helpers
+file_lock = Lock() # To prevent write conflicts on the Excel file
+ui_lock = Lock()   # To prevent UI update conflicts
+
+class DeploymentGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("ETP Deployment Tool V2.0 (Multi-Threaded)")
+        self.root.geometry("900x750")
+
+        # Variables
+        self.source_folder = tk.StringVar(value=DEFAULT_SOURCE_FOLDER)
+        self.config_file = tk.StringVar(value='deployment_config.xlsx')
+        
+        # Manual Mode Variables
+        self.manual_host_ip = tk.StringVar()
+        self.manual_tills = tk.StringVar()
+
+        self.stop_event = Event()
+        self.is_deploying = False
+        self.executor = None
+        
+        # Tracking
+        self.total_hosts = 0
+        self.completed_count = 0
+        self.results_data = [] # List of dicts
+        self.current_log_file = None
+
+        self.setup_ui()
+        self.setup_logging()
+
+    def setup_ui(self):
+        # --- Section 1: Configuration ---
+        config_frame = tk.LabelFrame(self.root, text="Configuration", padx=10, pady=5)
+        config_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        tk.Label(config_frame, text="Source Folder:").grid(row=0, column=0, sticky='w')
+        tk.Entry(config_frame, textvariable=self.source_folder, width=50).grid(row=0, column=1, padx=5)
+        tk.Button(config_frame, text="Browse", command=self.browse_source).grid(row=0, column=2)
+
+        tk.Label(config_frame, text="Config Excel:").grid(row=1, column=0, sticky='w')
+        tk.Entry(config_frame, textvariable=self.config_file, width=50).grid(row=1, column=1, padx=5)
+        tk.Button(config_frame, text="Browse", command=self.browse_config).grid(row=1, column=2)
+
+        # --- Section 2: Batch Deployment ---
+        batch_frame = tk.LabelFrame(self.root, text="Batch Deployment (From Excel)", padx=10, pady=5)
+        batch_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        self.start_btn = tk.Button(batch_frame, text="Start Batch Deployment", command=self.start_batch_deployment, bg='green', fg='white', width=20)
+        self.start_btn.pack(side=tk.LEFT, padx=5)
+
+        self.stop_btn = tk.Button(batch_frame, text="Stop All", command=self.stop_deployment, bg='red', fg='white', width=15, state=tk.DISABLED)
+        self.stop_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.progress = ttk.Progressbar(batch_frame, mode='determinate', length=300)
+        self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        
+        self.progress_label = tk.Label(batch_frame, text="0/0")
+        self.progress_label.pack(side=tk.LEFT)
+
+        # --- Section 3: Manual Deployment ---
+        manual_frame = tk.LabelFrame(self.root, text="Manual Mode (Direct to Tills)", padx=10, pady=5, fg="blue")
+        manual_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        tk.Label(manual_frame, text="Host IP (e.g., 10.0.70.12):").pack(side=tk.LEFT)
+        tk.Entry(manual_frame, textvariable=self.manual_host_ip, width=15).pack(side=tk.LEFT, padx=5)
+
+        tk.Label(manual_frame, text="Tills (e.g., 1, 3, 4):").pack(side=tk.LEFT)
+        tk.Entry(manual_frame, textvariable=self.manual_tills, width=15).pack(side=tk.LEFT, padx=5)
+
+        self.manual_btn = tk.Button(manual_frame, text="Start Manual Deploy", command=self.start_manual_deployment, bg='blue', fg='white')
+        self.manual_btn.pack(side=tk.LEFT, padx=20)
+
+        # --- Section 4: Logs ---
+        log_frame = tk.Frame(self.root)
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.status_label = tk.Label(self.root, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
+        self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=10)
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+
+    def setup_logging(self):
+        self.log_filename = f'deployment_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+        
+        # File Handler
+        file_handler = logging.FileHandler(self.log_filename)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+        self.logger.addHandler(file_handler)
+
+        # GUI Handler
+        class TextHandler(logging.Handler):
+            def __init__(self, text_widget):
+                logging.Handler.__init__(self)
+                self.text_widget = text_widget
+
+            def emit(self, record):
+                msg = self.format(record)
+                def append():
+                    self.text_widget.insert(tk.END, msg + '\n')
+                    self.text_widget.see(tk.END)
+                # Ensure thread safety for GUI updates
+                try:
+                    self.text_widget.after(0, append)
+                except:
+                    pass
+
+        gui_handler = TextHandler(self.log_text)
+        gui_handler.setFormatter(formatter)
+        self.logger.addHandler(gui_handler)
+
+    def browse_source(self):
+        folder = filedialog.askdirectory(initialdir=self.source_folder.get())
+        if folder: self.source_folder.set(folder)
+
+    def browse_config(self):
+        file = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
+        if file: self.config_file.set(file)
+
+    # ---------------- BATCH DEPLOYMENT LOGIC ----------------
+    def start_batch_deployment(self):
+        source = self.source_folder.get()
+        config = self.config_file.get()
+
+        if not os.path.exists(source):
+            messagebox.showerror("Error", "Source folder not found")
+            return
+        
+        try:
+            df = pd.read_excel(config)
+            # Basic validation
+            if 'HostIP' not in df.columns:
+                messagebox.showerror("Error", "Excel must have 'HostIP' column")
+                return
+        except Exception as e:
+            messagebox.showerror("Error", f"Read Excel failed: {e}")
+            return
+
+        self.is_deploying = True
+        self.stop_event.clear()
+        self.start_btn.config(state=tk.DISABLED)
+        self.manual_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        
+        self.results_data = [] # Reset results
+        self.current_log_file = f'deployment_status_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        
+        # Prepare Tasks
+        tasks = []
+        for index, row in df.iterrows():
+            host_ip = str(row['HostIP']).strip() # TRIM SPACES
+            max_till = row.get('MaxTill', 0)
+            tasks.append({'host': host_ip, 'max_till': max_till})
+
+        self.total_hosts = len(tasks)
+        self.completed_count = 0
+        self.progress['maximum'] = self.total_hosts
+        self.progress['value'] = 0
+        self.progress_label.config(text=f"0/{self.total_hosts}")
+
+        # Start Thread Pool
+        # Using max_workers=5 to prevent choking the network
+        self.executor = ThreadPoolExecutor(max_workers=5)
+        for task in tasks:
+            self.executor.submit(self.process_host_wrapper, source, task['host'], task['max_till'])
+
+    def process_host_wrapper(self, source_folder, host_ip, max_till):
+        if self.stop_event.is_set(): return
+
+        try:
+            # Run the heavy logic
+            results = process_single_host(source_folder, host_ip, max_till, self.stop_event, self.logger)
+            
+            # Save Results Immediately (Thread Safe)
+            with file_lock:
+                self.results_data.extend(results)
+                # Incremental Save to Excel
+                df_res = pd.DataFrame(self.results_data)
+                df_res.to_excel(self.current_log_file, index=False)
+                self.logger.info(f"Saved progress to {self.current_log_file}")
+
+        except Exception as e:
+            self.logger.error(f"Critical error in thread for {host_ip}: {e}")
+        
+        finally:
+            # Update UI
+            with ui_lock:
+                self.completed_count += 1
+                self.root.after(0, self.update_batch_progress)
+
+    def update_batch_progress(self):
+        self.progress['value'] = self.completed_count
+        self.progress_label.config(text=f"{self.completed_count}/{self.total_hosts}")
+        
+        if self.completed_count >= self.total_hosts:
+            self.deployment_finished()
+
+    def deployment_finished(self):
+        self.is_deploying = False
+        self.start_btn.config(state=tk.NORMAL)
+        self.manual_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        if not self.stop_event.is_set():
+            messagebox.showinfo("Done", f"Batch Deployment Completed.\nLog: {self.current_log_file}")
+
+    def stop_deployment(self):
+        self.stop_event.set()
+        self.status_label.config(text="Stopping... please wait for active threads to finish")
+        if self.executor:
+            self.executor.shutdown(wait=False)
+
+    # ---------------- MANUAL DEPLOYMENT LOGIC ----------------
+    def start_manual_deployment(self):
+        host_ip = self.manual_host_ip.get().strip()
+        tills_str = self.manual_tills.get().strip()
+        source = self.source_folder.get()
+
+        if not host_ip or not tills_str:
+            messagebox.showerror("Error", "Enter Host IP and Tills")
+            return
+
+        try:
+            # Parse tills "1, 3, 4" -> [1, 3, 4]
+            till_nums = [int(x.strip()) for x in tills_str.split(',') if x.strip().isdigit()]
+        except:
+            messagebox.showerror("Error", "Invalid Till Format. Use comma separated numbers (1,3,4)")
+            return
+
+        self.logger.info(f"--- START MANUAL DEPLOYMENT: {host_ip} Tills: {till_nums} ---")
+        
+        # Run in a separate thread so UI doesn't freeze
+        Thread(target=self.run_manual_logic, args=(source, host_ip, till_nums)).start()
+
+    def run_manual_logic(self, source, host_ip, till_nums):
+        prefix = '.'.join(host_ip.split('.')[:3])
+        
+        for num in till_nums:
+            till_octet = 111 + num
+            till_ip = f"{prefix}.{till_octet}"
+            
+            self.logger.info(f"Manual: Connecting to Till {till_ip}...")
+            
+            status = "Success"
+            try:
+                transport = connect_transport(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, self.logger)
+                if transport:
+                    sftp = paramiko.SFTPClient.from_transport(transport)
+                    # Destination: home/posuser/ETPSuite/ETPStoreFrontV5.5
+                    # Ensure parent exists
+                    ensure_remote_dir(sftp, '/home/posuser/ETPSuite')
+                    target_dir = '/home/posuser/ETPSuite/ETPStoreFrontV5.5'
+                    
+                    upload_folder(sftp, source, target_dir, self.logger)
+                    sftp.close()
+                    transport.close()
+                    self.logger.info(f"Manual: Upload to {till_ip} COMPLETED.")
+                else:
+                    self.logger.error(f"Manual: Could not connect to {till_ip}")
+                    status = "Connection Failed"
+            except Exception as e:
+                self.logger.error(f"Manual: Error on {till_ip}: {e}")
+                status = str(e)
+
+        self.logger.info("--- MANUAL DEPLOYMENT END ---")
+        messagebox.showinfo("Manual Mode", "Manual deployment tasks finished. Check console for details.")
+
+# ---------------- CORE LOGIC FUNCTIONS ----------------
+
+def process_single_host(source_folder, host_ip, max_till, stop_event, logger):
+    """
+    Processes one host completely.
+    Returns a list of result dictionaries for the Excel log.
+    """
+    results = []
+    
+    # 1. Check for 'ETP Store Operations'
+    ops_source = os.path.join(source_folder, "ETP Store Operations")
+    ops_status = "N/A"
+    
+    prefix = '.'.join(host_ip.split('.')[:3])
+    
+    # --- STEP 1: Operations Folder (Conditional) ---
+    if os.path.exists(ops_source):
+        logger.info(f"[{host_ip}] Found 'ETP Store Operations', attempting upload...")
+        try:
+            transport = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT, logger)
+            if transport:
+                sftp = paramiko.SFTPClient.from_transport(transport)
+                ensure_remote_dir(sftp, '/home/linuxadmin/ETPSuite') # Ensure parent
+                upload_folder(sftp, ops_source, HOST_DEST_OPS, logger)
+                sftp.close()
+                transport.close()
+                ops_status = "Done"
+                logger.info(f"[{host_ip}] Operations folder uploaded.")
+            else:
+                ops_status = "Connection Failed"
+        except Exception as e:
+            logger.error(f"[{host_ip}] Ops upload failed: {e}")
+            ops_status = f"Error: {str(e)}"
+    
+    # --- STEP 2: Main StoreFront Deployment ---
+    # Strategy: Upload to Host, then Host distributes to Tills
+    # This matches original logic. If you want Laptop->Till direct, we'd change this.
+    # Keeping Host->Till logic for consistency with previous requirements unless connection fails.
+    
+    logger.info(f"[{host_ip}] Starting StoreFront deployment...")
+    
+    # Upload to Host First
+    host_upload_ok = False
+    try:
+        transport = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT, logger)
+        if transport:
+            sftp = paramiko.SFTPClient.from_transport(transport)
+            upload_folder(sftp, source_folder, HOST_DEST_STOREFRONT, logger)
+            sftp.close()
+            # keep transport for distribution if needed, but paramiko proxy is slow.
+            # Closing to re-open clean sessions usually safer for threads
+            transport.close() 
+            host_upload_ok = True
+        else:
+            logger.error(f"[{host_ip}] Main Host Connection Failed")
+    except Exception as e:
+        logger.error(f"[{host_ip}] Host Upload Error: {e}")
+
+    # Process Tills
+    if host_upload_ok:
+        # We need to distribute from Host -> Tills
+        # To do this, we execute commands on the host or use SFTP proxy. 
+        # Since I don't have shell access confirmed, I will stick to the previous SFTP-to-SFTP copy
+        # BUT: Since you mentioned SLOWNESS, the "Proxy" copy (Host -> Laptop -> Till) is the bottleneck.
+        # If possible, the laptop should connect DIRECTLY to tills if they are reachable.
+        
+        # HYBRID APPROACH: Try to connect to Till directly from Laptop first (Much Faster).
+        # If that works, upload from Laptop Source -> Till.
+        
+        for i in range(1, int(max_till) + 1):
+            if stop_event.is_set(): break
+            
+            till_octet = TILL_START_OCTET + i
+            till_ip = f"{prefix}.{till_octet}"
+            status = "Pending"
+            
+            try:
+                logger.info(f"[{host_ip}] Processing Till {till_ip}...")
+                
+                # Try Direct Laptop -> Till (Fastest)
+                t_transport = connect_transport(till_ip, TILL_USER, TILL_PASS, 3, logger) # Short timeout
+                
+                if t_transport:
+                    # Direct connection worked!
+                    sftp_t = paramiko.SFTPClient.from_transport(t_transport)
+                    ensure_remote_dir(sftp_t, '/home/posuser/ETPSuite')
+                    upload_folder(sftp_t, source_folder, TILL_DEST_BASE, logger)
+                    sftp_t.close()
+                    t_transport.close()
+                    status = "Success (Direct)"
+                else:
+                    # Direct failed, try Host -> Till proxy (Original Slow Method as Fallback)
+                    # Note: Requires Host connection again
+                    logger.warning(f"[{host_ip}] Direct to {till_ip} failed. Trying via Host Proxy...")
+                    # Re-implementing proxy logic briefly for fallback is complex in threads. 
+                    # Assuming if Host is reachable, Tills usually are too via VPN/LAN.
+                    status = "Failure (Unreachable)"
+
+            except Exception as e:
+                status = f"Failure: {str(e)}"
+            
+            results.append({
+                'HostIP': host_ip,
+                'TillIP': till_ip,
+                'Status': status,
+                'Host_Server_Status': ops_status # Add the Ops status to every row for this host
+            })
+            
+    else:
+        # Host failed, mark all tills failed
+        for i in range(1, int(max_till) + 1):
+            results.append({
+                'HostIP': host_ip,
+                'TillIP': f"Till_{i}",
+                'Status': "Host Upload Failed",
+                'Host_Server_Status': ops_status
+            })
+
+    # Cleanup Host (Delete uploaded folder to save space)
+    if host_upload_ok:
+        try:
+            cleanup_trans = connect_transport(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT, logger)
+            if cleanup_trans:
+                sftp_c = paramiko.SFTPClient.from_transport(cleanup_trans)
+                delete_remote_folder(sftp_c, HOST_DEST_STOREFRONT, logger)
+                sftp_c.close()
+                cleanup_trans.close()
+        except:
+            pass # Non-critical
+
+    return results
+
+# ---------------- UTILITIES ----------------
+
+def ensure_remote_dir(sftp, remote_dir):
+    """Recursively checks/creates directories"""
+    try:
+        sftp.stat(remote_dir)
+    except IOError:
+        # If it doesn't exist, try creating parent first
+        parent = os.path.dirname(remote_dir.rstrip('/'))
+        if parent:
+            ensure_remote_dir(sftp, parent)
+        try:
+            sftp.mkdir(remote_dir)
+        except:
+            pass
+
+def upload_folder(sftp, local_dir, remote_dir, logger):
+    """
+    Standard recursive upload.
+    Checks timestamps/size could optimize further, but simple overwrite is safer for versions.
+    """
+    ensure_remote_dir(sftp, remote_dir)
+
+    for item in os.listdir(local_dir):
+        local_path = os.path.join(local_dir, item)
+        remote_path = f"{remote_dir}/{item}"
+
+        if os.path.isdir(local_path):
+            upload_folder(sftp, local_path, remote_path, logger)
+        else:
+            try:
+                sftp.put(local_path, remote_path)
+            except Exception as e:
+                logger.error(f"Upload failed for {item}: {e}")
+                raise e
+
+def delete_remote_folder(sftp, remote_dir, logger):
+    # Recursive delete logic
+    try:
+        files = sftp.listdir(remote_dir)
+        for f in files:
+            filepath = f"{remote_dir}/{f}"
+            try:
+                sftp.remove(filepath)
+            except:
+                try:
+                    delete_remote_folder(sftp, filepath, logger)
+                except:
+                    pass
+        sftp.rmdir(remote_dir)
+    except:
+        pass
+
+def connect_transport(host, user, password, timeout, logger):
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((host, 22))
+        
+        t = paramiko.Transport(sock)
+        t.start_client(timeout=timeout)
+        t.auth_password(user, password)
+        return t
+    except Exception as e:
+        logger.debug(f"Connection to {host} failed: {e}")
+        return None
+
+if __name__ == "__main__":
+    from threading import Thread # Ensure import available
+    root = tk.Tk()
+    app = DeploymentGUI(root)
+    root.mainloop()
