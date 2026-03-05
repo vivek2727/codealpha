@@ -1,0 +1,406 @@
+import os
+import logging
+import shutil
+import paramiko
+import socket
+import pandas as pd
+from datetime import datetime
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
+from threading import Event, Lock, Thread
+from concurrent.futures import ThreadPoolExecutor
+
+# --- Configuration ---
+DEFAULT_SOURCE_FOLDER = r'C:\Source\ETPStoreFrontV5.5'
+HOST_USER = 'linuxadmin'
+HOST_PASS = 'St0re@dm1n'
+TILL_USER = 'posuser'
+TILL_PASS = 'till@123'
+TILL_START_OCTET = 111
+
+# Standard Paths
+TILL_DEST_BASE = '/home/posuser/ETPSuite'
+HOST_DEST_BASE = '/home/linuxadmin'
+HOST_DEST_OPS = '/home/linuxadmin/ETPSuite/ETP Store Operations'
+
+TIMEOUT_CONNECT = 5
+file_lock = Lock()
+ui_lock = Lock()   
+
+class DeploymentGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("ETP Deployment Tool V4.0 (Architectural Flow + High Speed)")
+        self.root.geometry("900x750")
+
+        self.source_folder = tk.StringVar(value=DEFAULT_SOURCE_FOLDER)
+        self.config_file = tk.StringVar(value='deployment_config.xlsx')
+        self.manual_host_ip = tk.StringVar()
+        self.manual_tills = tk.StringVar()
+
+        self.stop_event = Event()
+        self.is_deploying = False
+        self.executor = None
+        self.total_hosts = 0
+        self.completed_count = 0
+        self.results_data = []
+        self.current_log_file = None
+        self.compressed_payload = None
+
+        self.setup_ui()
+        self.setup_logging()
+
+    def setup_ui(self):
+        # Section 1: Configuration
+        config_frame = tk.LabelFrame(self.root, text="Configuration", padx=10, pady=5)
+        config_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        tk.Label(config_frame, text="Source Folder:").grid(row=0, column=0, sticky='w')
+        tk.Entry(config_frame, textvariable=self.source_folder, width=50).grid(row=0, column=1, padx=5)
+        tk.Button(config_frame, text="Browse", command=self.browse_source).grid(row=0, column=2)
+
+        tk.Label(config_frame, text="Config Excel:").grid(row=1, column=0, sticky='w')
+        tk.Entry(config_frame, textvariable=self.config_file, width=50).grid(row=1, column=1, padx=5)
+        tk.Button(config_frame, text="Browse", command=self.browse_config).grid(row=1, column=2)
+
+        # Section 2: Batch Deployment
+        batch_frame = tk.LabelFrame(self.root, text="Batch Deployment (Laptop -> Host -> Tills)", padx=10, pady=5)
+        batch_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        self.start_btn = tk.Button(batch_frame, text="Start Batch Deployment", command=self.start_batch_deployment, bg='green', fg='white', width=20)
+        self.start_btn.pack(side=tk.LEFT, padx=5)
+
+        self.stop_btn = tk.Button(batch_frame, text="Stop All", command=self.stop_deployment, bg='red', fg='white', width=15, state=tk.DISABLED)
+        self.stop_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.progress = ttk.Progressbar(batch_frame, mode='determinate', length=300)
+        self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        
+        self.progress_label = tk.Label(batch_frame, text="0/0")
+        self.progress_label.pack(side=tk.LEFT)
+
+        # Section 3: Manual Deployment
+        manual_frame = tk.LabelFrame(self.root, text="Manual Mode (Laptop -> Tills Directly)", padx=10, pady=5, fg="blue")
+        manual_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        tk.Label(manual_frame, text="Host IP (e.g., 10.0.70.12):").pack(side=tk.LEFT)
+        tk.Entry(manual_frame, textvariable=self.manual_host_ip, width=15).pack(side=tk.LEFT, padx=5)
+
+        tk.Label(manual_frame, text="Tills (e.g., 1, 3, 4):").pack(side=tk.LEFT)
+        tk.Entry(manual_frame, textvariable=self.manual_tills, width=15).pack(side=tk.LEFT, padx=5)
+
+        self.manual_btn = tk.Button(manual_frame, text="Start Manual Deploy", command=self.start_manual_deployment, bg='blue', fg='white')
+        self.manual_btn.pack(side=tk.LEFT, padx=20)
+
+        # Section 4: Logs
+        log_frame = tk.Frame(self.root)
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.status_label = tk.Label(self.root, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
+        self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=10)
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+
+    def setup_logging(self):
+        self.log_filename = f'deployment_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+        file_handler = logging.FileHandler(self.log_filename)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+        self.logger.addHandler(file_handler)
+
+        class TextHandler(logging.Handler):
+            def __init__(self, text_widget):
+                logging.Handler.__init__(self)
+                self.text_widget = text_widget
+            def emit(self, record):
+                msg = self.format(record)
+                try: self.text_widget.after(0, lambda: self.text_widget.insert(tk.END, msg + '\n') or self.text_widget.see(tk.END))
+                except: pass
+
+        gui_handler = TextHandler(self.log_text)
+        gui_handler.setFormatter(formatter)
+        self.logger.addHandler(gui_handler)
+
+    def browse_source(self):
+        folder = filedialog.askdirectory(initialdir=self.source_folder.get())
+        if folder: self.source_folder.set(folder)
+
+    def browse_config(self):
+        file = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
+        if file: self.config_file.set(file)
+
+    # ==========================================
+    #             BATCH DEPLOYMENT
+    # ==========================================
+    def start_batch_deployment(self):
+        source = self.source_folder.get()
+        config = self.config_file.get()
+
+        if not os.path.exists(source): return messagebox.showerror("Error", "Source folder not found")
+        try:
+            df = pd.read_excel(config)
+            if 'HostIP' not in df.columns: return messagebox.showerror("Error", "Excel must have 'HostIP' column")
+        except Exception as e: return messagebox.showerror("Error", f"Read Excel failed: {e}")
+
+        self.is_deploying = True
+        self.stop_event.clear()
+        self.start_btn.config(state=tk.DISABLED)
+        self.manual_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        
+        self.logger.info("Compressing source folder locally. Please wait...")
+        Thread(target=self.prepare_and_start_threads, args=(source, df)).start()
+
+    def prepare_and_start_threads(self, source, df):
+        try:
+            # Compress laptop source folder ONCE
+            self.compressed_payload = shutil.make_archive('deploy_payload', 'gztar', root_dir=source)
+            self.logger.info(f"Compression complete: {self.compressed_payload}")
+        except Exception as e:
+            self.logger.error(f"Failed to compress folder: {e}")
+            self.deployment_finished()
+            return
+
+        self.results_data = []
+        self.current_log_file = f'deployment_status_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        
+        # Trim spaces from IPs while parsing
+        tasks = [{'host': str(row['HostIP']).strip(), 'max_till': row.get('MaxTill', 0)} for _, row in df.iterrows()]
+        self.total_hosts = len(tasks)
+        self.completed_count = 0
+        
+        with ui_lock:
+            self.progress['maximum'] = self.total_hosts
+            self.progress['value'] = 0
+            self.progress_label.config(text=f"0/{self.total_hosts}")
+
+        self.executor = ThreadPoolExecutor(max_workers=3)
+        for task in tasks:
+            self.executor.submit(self.process_host_wrapper, source, task['host'], task['max_till'])
+
+    def process_host_wrapper(self, source_folder, host_ip, max_till):
+        if self.stop_event.is_set(): return
+        try:
+            results = process_batch_host(source_folder, self.compressed_payload, host_ip, max_till, self.stop_event, self.logger)
+            with file_lock:
+                self.results_data.extend(results)
+                pd.DataFrame(self.results_data).to_excel(self.current_log_file, index=False)
+        except Exception as e:
+            self.logger.error(f"Critical error in thread for {host_ip}: {e}")
+        finally:
+            with ui_lock:
+                self.completed_count += 1
+                self.root.after(0, self.update_batch_progress)
+
+    def update_batch_progress(self):
+        self.progress['value'] = self.completed_count
+        self.progress_label.config(text=f"{self.completed_count}/{self.total_hosts}")
+        if self.completed_count >= self.total_hosts: self.deployment_finished()
+
+    def deployment_finished(self):
+        self.is_deploying = False
+        self.start_btn.config(state=tk.NORMAL)
+        self.manual_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        if self.compressed_payload and os.path.exists(self.compressed_payload):
+            try: os.remove(self.compressed_payload)
+            except: pass
+        if not self.stop_event.is_set(): messagebox.showinfo("Done", f"Deployment Completed.\nLog: {self.current_log_file}")
+
+    def stop_deployment(self):
+        self.stop_event.set()
+        self.status_label.config(text="Stopping... waiting for active transfers to abort.")
+        if self.executor: self.executor.shutdown(wait=False)
+
+    # ==========================================
+    #             MANUAL DEPLOYMENT
+    # ==========================================
+    def start_manual_deployment(self):
+        host_ip = self.manual_host_ip.get().strip()
+        tills_str = self.manual_tills.get().strip()
+        source = self.source_folder.get()
+
+        if not host_ip or not tills_str: return messagebox.showerror("Error", "Enter Host IP and Tills")
+        try: till_nums = [int(x.strip()) for x in tills_str.split(',') if x.strip().isdigit()]
+        except: return messagebox.showerror("Error", "Invalid Till Format. Use: 1, 3, 4")
+
+        self.logger.info(f"--- MANUAL DEPLOY: {host_ip} Tills: {till_nums} ---")
+        self.manual_btn.config(state=tk.DISABLED)
+        Thread(target=self.run_manual_logic, args=(source, host_ip, till_nums)).start()
+
+    def run_manual_logic(self, source, host_ip, till_nums):
+        try:
+            # Compress locally
+            temp_payload = shutil.make_archive('manual_payload', 'gztar', root_dir=source)
+            prefix = '.'.join(host_ip.split('.')[:3])
+            
+            for num in till_nums:
+                till_ip = f"{prefix}.{111 + num}"
+                self.logger.info(f"Manual: Connecting to {till_ip} directly...")
+                ssh_client = connect_ssh(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, self.logger)
+                if ssh_client:
+                    # Direct Laptop -> Till upload and extract
+                    upload_and_extract(ssh_client, temp_payload, TILL_DEST_BASE, "ETPStoreFrontV5.5", self.logger)
+                    ssh_client.close()
+                    self.logger.info(f"Manual: Direct Upload to {till_ip} COMPLETED.")
+                else:
+                    self.logger.error(f"Manual: Could not connect to {till_ip}")
+            os.remove(temp_payload)
+        except Exception as e: self.logger.error(f"Manual Error: {e}")
+        finally:
+            self.manual_btn.config(state=tk.NORMAL)
+            self.logger.info("--- MANUAL DEPLOYMENT END ---")
+
+# ==========================================
+#          CORE LOGIC FUNCTIONS
+# ==========================================
+
+def process_batch_host(source_folder, compressed_payload, host_ip, max_till, stop_event, logger):
+    """ Executes the specific Laptop -> Host -> Tills flow. """
+    results = []
+    prefix = '.'.join(host_ip.split('.')[:3])
+    ops_source = os.path.join(source_folder, "ETP Store Operations")
+    ops_status = "N/A"
+    
+    # --- 1. Store Operations Logic (If exists locally) ---
+    if os.path.exists(ops_source):
+        try:
+            ssh_ops = connect_ssh(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT, logger)
+            if ssh_ops:
+                ops_payload = shutil.make_archive('ops_payload', 'gztar', root_dir=ops_source)
+                logger.info(f"[{host_ip}] Uploading ETP Store Operations to Host...")
+                upload_and_extract(ssh_ops, ops_payload, '/home/linuxadmin/ETPSuite', 'ETP Store Operations', logger)
+                os.remove(ops_payload)
+                ssh_ops.close()
+                ops_status = "Done"
+            else: ops_status = "Connection Failed"
+        except Exception as e:
+            ops_status = f"Error: {e}"
+
+    logger.info(f"[{host_ip}] Starting StoreFront Host Deployment...")
+    
+    # --- 2. Laptop to Host Transfer ---
+    host_upload_ok = False
+    remote_host_tar = f"{HOST_DEST_BASE}/deploy_temp.tar.gz"
+    
+    try:
+        ssh_host = connect_ssh(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT, logger)
+        if ssh_host:
+            # Upload the zipped file and extract it so the folder physically exists on the Host Server
+            upload_and_extract(ssh_host, compressed_payload, HOST_DEST_BASE, "ETPStoreFrontV5.5", logger)
+            host_upload_ok = True
+    except Exception as e:
+        logger.error(f"[{host_ip}] Host Upload Error: {e}")
+
+    # --- 3. Host to Till Distribution ---
+    if host_upload_ok:
+        sftp_host = ssh_host.open_sftp() # Open SFTP on the Host to read the zip file
+        
+        for i in range(1, int(max_till) + 1):
+            if stop_event.is_set(): break
+            till_ip = f"{prefix}.{TILL_START_OCTET + i}"
+            status = "Pending"
+            
+            try:
+                logger.info(f"[{host_ip}] Distributing from Host to Till {till_ip}...")
+                ssh_till = connect_ssh(till_ip, TILL_USER, TILL_PASS, 4, logger)
+                
+                if ssh_till:
+                    sftp_till = ssh_till.open_sftp()
+                    remote_till_tar = f"{TILL_DEST_BASE}/deploy_temp.tar.gz"
+                    
+                    # Ensure base folder exists on Till
+                    ssh_till.exec_command(f"mkdir -p '{TILL_DEST_BASE}'")
+                    
+                    # STREAM THE COMPRESSED FILE: Host SFTP -> Laptop RAM -> Till SFTP
+                    # (This takes a few seconds because it is one continuous byte stream)
+                    with sftp_host.open(remote_host_tar, 'rb') as fr:
+                        with sftp_till.open(remote_till_tar, 'wb') as fw:
+                            shutil.copyfileobj(fr, fw)
+                    
+                    # Tell Till to extract the zipped file locally
+                    remote_target_dir = f"{TILL_DEST_BASE}/ETPStoreFrontV5.5"
+                    ssh_till.exec_command(f"mkdir -p '{remote_target_dir}'")
+                    stdin, stdout, stderr = ssh_till.exec_command(f"tar -xzf '{remote_till_tar}' -C '{remote_target_dir}'")
+                    stdout.channel.recv_exit_status() # Wait to finish
+                    
+                    # Delete zip on Till
+                    sftp_till.remove(remote_till_tar)
+                    sftp_till.close()
+                    ssh_till.close()
+                    
+                    status = "Success"
+                    logger.info(f"[{host_ip}] Till {till_ip} Success.")
+                else:
+                    status = "Failure (Unreachable)"
+                    logger.warning(f"[{host_ip}] Till {till_ip} unreachable.")
+
+            except Exception as e:
+                status = f"Failure: {str(e)}"
+            
+            results.append({'HostIP': host_ip, 'TillIP': till_ip, 'Status': status, 'Host_Server_Status': ops_status})
+        
+        # --- 4. Server Cleanup ---
+        # We delete the zip file and the folder from the Host to keep it clean.
+        sftp_host.close()
+        ssh_host.exec_command(f"rm -f '{remote_host_tar}'")
+        ssh_host.exec_command(f"rm -rf '{HOST_DEST_BASE}/ETPStoreFrontV5.5'")
+        ssh_host.close()
+        
+    else:
+        # If host fails, all tills fail
+        for i in range(1, int(max_till) + 1):
+            results.append({'HostIP': host_ip, 'TillIP': f"Till_{i}", 'Status': "Host Upload Failed", 'Host_Server_Status': ops_status})
+
+    return results
+
+# ==========================================
+#          NETWORK UTILITIES
+# ==========================================
+
+def connect_ssh(host, user, password, timeout, logger):
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(host, port=22, username=user, password=password, timeout=timeout)
+        return ssh
+    except Exception as e:
+        logger.debug(f"Connection to {host} failed: {e}")
+        return None
+
+def upload_and_extract(ssh_client, local_tar_path, remote_base_dir, remote_folder_name, logger):
+    """ Uploads 1 compressed file from Laptop to Remote Server, and unzips it. """
+    sftp = ssh_client.open_sftp()
+    remote_tar_path = f"{remote_base_dir}/deploy_temp.tar.gz"
+    remote_target_dir = f"{remote_base_dir}/{remote_folder_name}"
+
+    ssh_client.exec_command(f"mkdir -p '{remote_base_dir}'")
+    
+    # Upload the file
+    sftp.put(local_tar_path, remote_tar_path)
+
+    # Extract it
+    ssh_client.exec_command(f"mkdir -p '{remote_target_dir}'")
+    stdin, stdout, stderr = ssh_client.exec_command(f"tar -xzf '{remote_tar_path}' -C '{remote_target_dir}'")
+    exit_status = stdout.channel.recv_exit_status()
+    
+    # If this is being called by the Batch Host step, we DO NOT delete the tar file yet, 
+    # because the Tills need to copy it. We let the cleanup step handle it later.
+    # However, if it's Ops or Manual, we can delete it immediately.
+    if "manual_payload" in local_tar_path or "ops_payload" in local_tar_path:
+        sftp.remove(remote_tar_path)
+        
+    sftp.close()
+
+    if exit_status != 0:
+        error_msg = stderr.read().decode().strip()
+        raise Exception(f"Linux Extraction failed: {error_msg}")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = DeploymentGUI(root)
+    root.mainloop()
