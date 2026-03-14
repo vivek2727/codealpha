@@ -1,0 +1,640 @@
+import os
+import logging
+import shutil
+import tarfile
+import socket
+import paramiko
+import pandas as pd
+from datetime import datetime
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
+from threading import Event, Lock, Thread
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# ==============================================================================
+#  CONFIGURATION
+# ==============================================================================
+DEFAULT_SOURCE_FOLDER = r'C:\Source\ETPStoreFrontV5.5'
+HOST_USER    = 'linuxadmin'
+HOST_PASS    = 'St0re@dm1n'
+TILL_USER    = 'posuser'
+TILL_PASS    = 'till@123'
+TILL_START_OCTET = 111
+
+# Standard Paths
+TILL_DEST_BASE  = '/home/posuser/ETPSuite'
+HOST_DEST_BASE  = '/home/linuxadmin'
+HOST_DEST_OPS   = '/home/linuxadmin/ETPSuite/ETP Store Operations'
+
+TIMEOUT_CONNECT = 5
+SFTP_BUFFER     = 2 * 1024 * 1024   # 2 MB — critical for streaming speed
+TILL_PARALLEL_WORKERS = 4           # Tills deployed in parallel per host
+
+file_lock = Lock()
+ui_lock   = Lock()
+
+
+# ==============================================================================
+#  NETWORK UTILITIES
+# ==============================================================================
+
+def connect_ssh(host, user, password, timeout, logger):
+    """
+    Connect via SSH with an enlarged transport window so large file transfers
+    don't stall waiting for acknowledgements.
+    Window size 2 GB and deferred re-key avoid mid-transfer pauses.
+    """
+    try:
+        sock = socket.create_connection((host, 22), timeout=timeout)
+        transport = paramiko.Transport(sock)
+        transport.window_size           = 2_147_483_647   # 2 GB window
+        transport.packetizer.REKEY_BYTES   = 2 ** 40      # defer re-key
+        transport.packetizer.REKEY_PACKETS = 2 ** 40
+        transport.connect(username=user, password=password)
+        ssh = paramiko.SSHClient()
+        ssh._transport = transport
+        return ssh
+    except Exception as e:
+        logger.debug(f"SSH to {host} failed: {e}")
+        return None
+
+
+def check_sshpass(ssh_client):
+    """Return True if sshpass is installed on the remote machine."""
+    _, stdout, _ = ssh_client.exec_command("which sshpass 2>/dev/null || echo ''")
+    return bool(stdout.read().decode().strip())
+
+
+# ==============================================================================
+#  COMPRESSION
+# ==============================================================================
+
+def fast_compress(source_dir, output_path):
+    """
+    Create a .tar.gz archive using gzip level 1 (fastest).
+    shutil.make_archive uses level 9 by default — level 1 is ~3-4x faster
+    for a modest increase in file size (acceptable on LAN).
+    """
+    with tarfile.open(output_path, 'w:gz', compresslevel=1) as tar:
+        tar.add(source_dir, arcname='.')
+    return output_path
+
+
+# ==============================================================================
+#  UPLOAD AND EXTRACT  (Laptop → Host OR Laptop → Till directly)
+# ==============================================================================
+
+def upload_and_extract(ssh_client, local_tar_path, remote_base_dir,
+                       remote_folder_name, logger, keep_tar=False):
+    """
+    Upload one compressed archive from the laptop to a remote machine and
+    extract it.  chmod -R 777 is applied automatically so no manual fix-up
+    is ever needed.
+
+    keep_tar=True  → leave the .tar.gz on the remote (Batch Host step: tills
+                      will copy it)
+    keep_tar=False → remove the .tar.gz after extraction (Ops / Manual step)
+    """
+    sftp = ssh_client.open_sftp()
+    remote_tar    = f"{remote_base_dir}/deploy_temp.tar.gz"
+    remote_target = f"{remote_base_dir}/{remote_folder_name}"
+
+    ssh_client.exec_command(f"mkdir -p '{remote_base_dir}'")
+
+    # Upload with a large internal buffer
+    with open(local_tar_path, 'rb') as local_f:
+        sftp.putfo(local_f, remote_tar)
+
+    # Extract + permissions + optional cleanup — one round-trip
+    cleanup = "" if keep_tar else f" && rm -f '{remote_tar}'"
+    cmd = (
+        f"mkdir -p '{remote_target}' && "
+        f"tar -xzf '{remote_tar}' -C '{remote_target}' && "
+        f"chmod -R 777 '{remote_base_dir}'"
+        f"{cleanup}"
+    )
+    _, stdout, stderr = ssh_client.exec_command(cmd)
+    exit_status = stdout.channel.recv_exit_status()
+    sftp.close()
+
+    if exit_status != 0:
+        raise Exception(f"Extraction failed: {stderr.read().decode().strip()}")
+
+
+# ==============================================================================
+#  TILL DISTRIBUTION  (Host → Till, two strategies)
+# ==============================================================================
+
+def _deploy_via_sshpass(ssh_host, remote_host_tar, till_ip, logger):
+    """
+    Ask the Host to SCP the file directly to the Till (pure LAN speed).
+    Requires sshpass to be installed on the Host.
+    """
+    remote_till_tar = f"{TILL_DEST_BASE}/deploy_temp.tar.gz"
+    cmd = (
+        f"sshpass -p '{TILL_PASS}' scp "
+        f"-o StrictHostKeyChecking=no -o ConnectTimeout=10 "
+        f"'{remote_host_tar}' {TILL_USER}@{till_ip}:'{remote_till_tar}'"
+    )
+    _, stdout, stderr = ssh_host.exec_command(cmd, timeout=300)
+    rc = stdout.channel.recv_exit_status()
+    if rc != 0:
+        raise Exception(f"Host-SCP failed (rc={rc}): {stderr.read().decode().strip()}")
+    return remote_till_tar
+
+
+def _deploy_via_relay(sftp_host, till_ip, logger):
+    """
+    Fallback: stream the file through the laptop using a 2 MB buffer.
+    Still slower than sshpass but far faster than the 32 KB default.
+    """
+    remote_host_tar  = f"{HOST_DEST_BASE}/deploy_temp.tar.gz"
+    remote_till_tar  = f"{TILL_DEST_BASE}/deploy_temp.tar.gz"
+
+    ssh_till = connect_ssh(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, logger)
+    if not ssh_till:
+        return None, None
+
+    sftp_till = ssh_till.open_sftp()
+    ssh_till.exec_command(f"mkdir -p '{TILL_DEST_BASE}'")
+
+    with sftp_host.open(remote_host_tar, 'rb', bufsize=SFTP_BUFFER) as fr:
+        with sftp_till.open(remote_till_tar, 'wb', bufsize=SFTP_BUFFER) as fw:
+            shutil.copyfileobj(fr, fw, length=SFTP_BUFFER)
+
+    sftp_till.close()
+    return ssh_till, remote_till_tar
+
+
+def deploy_single_till(ssh_host, sftp_host, host_has_sshpass,
+                       remote_host_tar, host_ip, till_ip,
+                       stop_event, logger):
+    """
+    Deploy to one Till.  Returns (till_ip, status_string).
+    Called from a thread pool so each till runs in parallel.
+    """
+    if stop_event.is_set():
+        return till_ip, "Stopped"
+
+    remote_till_tar  = f"{TILL_DEST_BASE}/deploy_temp.tar.gz"
+    remote_target    = f"{TILL_DEST_BASE}/ETPStoreFrontV5.5"
+    t_start = datetime.now()
+
+    try:
+        if host_has_sshpass:
+            # ── Strategy A: Host pushes directly to Till ──────────────────
+            logger.info(f"[{host_ip}] → {till_ip}  (host-side SCP via sshpass)")
+            remote_till_tar = _deploy_via_sshpass(ssh_host, remote_host_tar, till_ip, logger)
+
+            ssh_till = connect_ssh(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, logger)
+            if not ssh_till:
+                return till_ip, "Failure (Unreachable after SCP)"
+        else:
+            # ── Strategy B: Stream through laptop with 2 MB buffer ────────
+            logger.info(f"[{host_ip}] → {till_ip}  (laptop relay, 2 MB buffer)")
+            ssh_till = connect_ssh(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, logger)
+            if not ssh_till:
+                return till_ip, "Failure (Unreachable)"
+
+            sftp_till = ssh_till.open_sftp()
+            ssh_till.exec_command(f"mkdir -p '{TILL_DEST_BASE}'")
+            with sftp_host.open(remote_host_tar, 'rb', bufsize=SFTP_BUFFER) as fr:
+                with sftp_till.open(remote_till_tar, 'wb', bufsize=SFTP_BUFFER) as fw:
+                    shutil.copyfileobj(fr, fw, length=SFTP_BUFFER)
+            sftp_till.close()
+
+        # ── Extract + chmod + cleanup (single SSH round-trip) ────────────
+        cmd = (
+            f"mkdir -p '{remote_target}' && "
+            f"tar -xzf '{remote_till_tar}' -C '{remote_target}' && "
+            f"chmod -R 777 '{TILL_DEST_BASE}' && "
+            f"rm -f '{remote_till_tar}'"
+        )
+        _, stdout, stderr = ssh_till.exec_command(cmd)
+        rc = stdout.channel.recv_exit_status()
+        ssh_till.close()
+
+        if rc != 0:
+            err = stderr.read().decode().strip()
+            return till_ip, f"Failure (Extract: {err})"
+
+        elapsed = (datetime.now() - t_start).seconds
+        logger.info(f"[{host_ip}] Till {till_ip} SUCCESS  ({elapsed}s)")
+        return till_ip, "Success"
+
+    except Exception as e:
+        logger.error(f"[{host_ip}] Till {till_ip} error: {e}")
+        return till_ip, f"Failure: {str(e)}"
+
+
+# ==============================================================================
+#  CORE BATCH HOST LOGIC
+# ==============================================================================
+
+def process_batch_host(source_folder, compressed_payload, host_ip, max_till,
+                       stop_event, logger):
+    """
+    Full deployment flow for one Host + all its Tills.
+
+    Step 1  Store Operations upload to Host  (if the sub-folder exists)
+    Step 2  StoreFront archive upload to Host
+    Step 3  Parallel distribution to all Tills  (sshpass or buffered relay)
+    Step 4  Host cleanup
+    """
+    results   = []
+    prefix    = '.'.join(host_ip.split('.')[:3])
+    ops_source = os.path.join(source_folder, "ETP Store Operations")
+    ops_status = "N/A"
+
+    # ── 1. Store Operations ──────────────────────────────────────────────────
+    if os.path.exists(ops_source):
+        try:
+            ssh_ops = connect_ssh(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT, logger)
+            if ssh_ops:
+                ops_tar = fast_compress(ops_source, 'ops_payload.tar.gz')
+                logger.info(f"[{host_ip}] Uploading ETP Store Operations...")
+                upload_and_extract(ssh_ops, ops_tar, '/home/linuxadmin/ETPSuite',
+                                   'ETP Store Operations', logger, keep_tar=False)
+                os.remove(ops_tar)
+                ssh_ops.close()
+                ops_status = "Done"
+            else:
+                ops_status = "Connection Failed"
+        except Exception as e:
+            ops_status = f"Error: {e}"
+            logger.error(f"[{host_ip}] Ops error: {e}")
+
+    # ── 2. Upload StoreFront archive to Host ─────────────────────────────────
+    logger.info(f"[{host_ip}] Uploading StoreFront archive to Host...")
+    t0 = datetime.now()
+
+    ssh_host = connect_ssh(host_ip, HOST_USER, HOST_PASS, TIMEOUT_CONNECT, logger)
+    if not ssh_host:
+        logger.error(f"[{host_ip}] Cannot connect to Host — skipping all tills.")
+        for i in range(1, int(max_till) + 1):
+            results.append({'HostIP': host_ip,
+                            'TillIP': f"{prefix}.{TILL_START_OCTET + i}",
+                            'Status': "Host Unreachable",
+                            'Host_Server_Status': ops_status})
+        return results
+
+    remote_host_tar = f"{HOST_DEST_BASE}/deploy_temp.tar.gz"
+    try:
+        upload_and_extract(ssh_host, compressed_payload, HOST_DEST_BASE,
+                           "ETPStoreFrontV5.5", logger, keep_tar=True)
+        upload_secs = (datetime.now() - t0).seconds
+        logger.info(f"[{host_ip}] Host upload done in {upload_secs}s")
+    except Exception as e:
+        logger.error(f"[{host_ip}] Host upload failed: {e}")
+        ssh_host.close()
+        for i in range(1, int(max_till) + 1):
+            results.append({'HostIP': host_ip,
+                            'TillIP': f"{prefix}.{TILL_START_OCTET + i}",
+                            'Status': f"Host Upload Failed: {e}",
+                            'Host_Server_Status': ops_status})
+        return results
+
+    # ── 3. Parallel Till distribution ────────────────────────────────────────
+    host_has_sshpass = check_sshpass(ssh_host)
+    method = "host-side SCP (sshpass)" if host_has_sshpass else "laptop relay (2 MB buffer)"
+    logger.info(f"[{host_ip}] Distributing to {max_till} tills — method: {method}")
+
+    sftp_host = ssh_host.open_sftp()
+
+    till_ips = [
+        f"{prefix}.{TILL_START_OCTET + i}"
+        for i in range(1, int(max_till) + 1)
+    ]
+
+    workers = min(len(till_ips), TILL_PARALLEL_WORKERS)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(
+                deploy_single_till,
+                ssh_host, sftp_host, host_has_sshpass,
+                remote_host_tar, host_ip, t_ip,
+                stop_event, logger
+            ): t_ip
+            for t_ip in till_ips
+            if not stop_event.is_set()
+        }
+        for future in as_completed(futures):
+            t_ip, status = future.result()
+            results.append({
+                'HostIP':             host_ip,
+                'TillIP':             t_ip,
+                'Status':             status,
+                'Host_Server_Status': ops_status
+            })
+
+    # ── 4. Host cleanup ───────────────────────────────────────────────────────
+    sftp_host.close()
+    ssh_host.exec_command(f"rm -f '{remote_host_tar}'")
+    ssh_host.exec_command(f"rm -rf '{HOST_DEST_BASE}/ETPStoreFrontV5.5'")
+    ssh_host.close()
+
+    return results
+
+
+# ==============================================================================
+#  GUI
+# ==============================================================================
+
+class DeploymentGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("ETP Deployment Tool V5.0 — Parallel + Fast Transfer")
+        self.root.geometry("900x780")
+
+        self.source_folder   = tk.StringVar(value=DEFAULT_SOURCE_FOLDER)
+        self.config_file     = tk.StringVar(value='deployment_config.xlsx')
+        self.manual_host_ip  = tk.StringVar()
+        self.manual_tills    = tk.StringVar()
+
+        self.stop_event        = Event()
+        self.is_deploying      = False
+        self.executor          = None
+        self.total_hosts       = 0
+        self.completed_count   = 0
+        self.results_data      = []
+        self.current_log_file  = None
+        self.compressed_payload = None
+
+        self.setup_ui()
+        self.setup_logging()
+
+    # ── UI ────────────────────────────────────────────────────────────────────
+
+    def setup_ui(self):
+        # Section 1: Configuration
+        cfg = tk.LabelFrame(self.root, text="Configuration", padx=10, pady=5)
+        cfg.pack(fill=tk.X, padx=10, pady=5)
+
+        tk.Label(cfg, text="Source Folder:").grid(row=0, column=0, sticky='w')
+        tk.Entry(cfg, textvariable=self.source_folder, width=55).grid(row=0, column=1, padx=5)
+        tk.Button(cfg, text="Browse", command=self.browse_source).grid(row=0, column=2)
+
+        tk.Label(cfg, text="Config Excel:").grid(row=1, column=0, sticky='w')
+        tk.Entry(cfg, textvariable=self.config_file, width=55).grid(row=1, column=1, padx=5)
+        tk.Button(cfg, text="Browse", command=self.browse_config).grid(row=1, column=2)
+
+        # Speed hint label
+        tk.Label(cfg,
+                 text=f"⚡ Compression: gzip level 1 (fast)  |  "
+                      f"Parallel tills per host: {TILL_PARALLEL_WORKERS}  |  "
+                      f"SFTP buffer: {SFTP_BUFFER//1024} KB  |  "
+                      f"chmod 777 applied automatically",
+                 fg="dark green", font=("Arial", 8)
+                 ).grid(row=2, column=0, columnspan=3, sticky='w', pady=(2, 0))
+
+        # Section 2: Batch Deployment
+        batch = tk.LabelFrame(self.root,
+                              text="Batch Deployment  (Laptop → Host → Tills in parallel)",
+                              padx=10, pady=5)
+        batch.pack(fill=tk.X, padx=10, pady=5)
+
+        self.start_btn = tk.Button(batch, text="Start Batch Deployment",
+                                   command=self.start_batch_deployment,
+                                   bg='green', fg='white', width=22)
+        self.start_btn.pack(side=tk.LEFT, padx=5)
+
+        self.stop_btn = tk.Button(batch, text="Stop All",
+                                  command=self.stop_deployment,
+                                  bg='red', fg='white', width=15, state=tk.DISABLED)
+        self.stop_btn.pack(side=tk.LEFT, padx=5)
+
+        self.progress = ttk.Progressbar(batch, mode='determinate', length=300)
+        self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+
+        self.progress_label = tk.Label(batch, text="0/0")
+        self.progress_label.pack(side=tk.LEFT)
+
+        # Section 3: Manual Deployment
+        manual = tk.LabelFrame(self.root,
+                               text="Manual Mode  (Laptop → Tills directly)",
+                               padx=10, pady=5, fg="blue")
+        manual.pack(fill=tk.X, padx=10, pady=5)
+
+        tk.Label(manual, text="Host IP (e.g. 10.0.70.12):").pack(side=tk.LEFT)
+        tk.Entry(manual, textvariable=self.manual_host_ip, width=15).pack(side=tk.LEFT, padx=5)
+
+        tk.Label(manual, text="Tills (e.g. 1, 3, 4):").pack(side=tk.LEFT)
+        tk.Entry(manual, textvariable=self.manual_tills, width=15).pack(side=tk.LEFT, padx=5)
+
+        self.manual_btn = tk.Button(manual, text="Start Manual Deploy",
+                                    command=self.start_manual_deployment,
+                                    bg='blue', fg='white')
+        self.manual_btn.pack(side=tk.LEFT, padx=20)
+
+        # Status + Logs
+        self.status_label = tk.Label(self.root, text="Ready",
+                                     relief=tk.SUNKEN, anchor=tk.W)
+        self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
+
+        log_frame = tk.Frame(self.root)
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=12)
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+
+    def setup_logging(self):
+        self.log_filename = f'deployment_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+        fh = logging.FileHandler(self.log_filename)
+        fmt = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        fh.setFormatter(fmt)
+
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+        self.logger.addHandler(fh)
+
+        class _TextHandler(logging.Handler):
+            def __init__(self, widget):
+                super().__init__()
+                self.widget = widget
+            def emit(self, record):
+                msg = self.format(record)
+                try:
+                    self.widget.after(0,
+                        lambda m=msg: (self.widget.insert(tk.END, m + '\n'),
+                                       self.widget.see(tk.END)))
+                except Exception:
+                    pass
+
+        gh = _TextHandler(self.log_text)
+        gh.setFormatter(fmt)
+        self.logger.addHandler(gh)
+
+    def browse_source(self):
+        d = filedialog.askdirectory(initialdir=self.source_folder.get())
+        if d: self.source_folder.set(d)
+
+    def browse_config(self):
+        f = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
+        if f: self.config_file.set(f)
+
+    # ── Batch Deployment ──────────────────────────────────────────────────────
+
+    def start_batch_deployment(self):
+        source = self.source_folder.get()
+        config = self.config_file.get()
+
+        if not os.path.exists(source):
+            return messagebox.showerror("Error", "Source folder not found")
+        try:
+            df = pd.read_excel(config)
+            if 'HostIP' not in df.columns:
+                return messagebox.showerror("Error", "Excel must have 'HostIP' column")
+        except Exception as e:
+            return messagebox.showerror("Error", f"Read Excel failed: {e}")
+
+        self.is_deploying = True
+        self.stop_event.clear()
+        self.start_btn.config(state=tk.DISABLED)
+        self.manual_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        self.status_label.config(text="Compressing source folder (gzip level 1)...")
+
+        Thread(target=self.prepare_and_start_threads, args=(source, df)).start()
+
+    def prepare_and_start_threads(self, source, df):
+        t0 = datetime.now()
+        try:
+            payload_path = 'deploy_payload.tar.gz'
+            fast_compress(source, payload_path)
+            self.compressed_payload = os.path.abspath(payload_path)
+            secs = (datetime.now() - t0).seconds
+            size_mb = os.path.getsize(self.compressed_payload) / 1_048_576
+            self.logger.info(
+                f"Compression done in {secs}s — {size_mb:.1f} MB  "
+                f"(gzip level 1, ~3-4x faster than default)"
+            )
+        except Exception as e:
+            self.logger.error(f"Compression failed: {e}")
+            self.deployment_finished()
+            return
+
+        self.results_data   = []
+        self.current_log_file = f'deployment_status_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        tasks = [{'host': str(r['HostIP']).strip(),
+                  'max_till': r.get('MaxTill', 0)}
+                 for _, r in df.iterrows()]
+
+        self.total_hosts     = len(tasks)
+        self.completed_count = 0
+
+        with ui_lock:
+            self.progress['maximum'] = self.total_hosts
+            self.progress['value']   = 0
+            self.progress_label.config(text=f"0/{self.total_hosts}")
+
+        self.executor = ThreadPoolExecutor(max_workers=3)
+        for t in tasks:
+            self.executor.submit(
+                self.process_host_wrapper,
+                source, t['host'], t['max_till']
+            )
+
+    def process_host_wrapper(self, source_folder, host_ip, max_till):
+        if self.stop_event.is_set():
+            return
+        try:
+            results = process_batch_host(
+                source_folder, self.compressed_payload,
+                host_ip, max_till,
+                self.stop_event, self.logger
+            )
+            with file_lock:
+                self.results_data.extend(results)
+                pd.DataFrame(self.results_data).to_excel(self.current_log_file, index=False)
+        except Exception as e:
+            self.logger.error(f"Critical thread error for {host_ip}: {e}")
+        finally:
+            with ui_lock:
+                self.completed_count += 1
+                self.root.after(0, self.update_batch_progress)
+
+    def update_batch_progress(self):
+        self.progress['value'] = self.completed_count
+        self.progress_label.config(text=f"{self.completed_count}/{self.total_hosts}")
+        pct = int(self.completed_count / max(self.total_hosts, 1) * 100)
+        self.status_label.config(text=f"Deploying... {pct}%")
+        if self.completed_count >= self.total_hosts:
+            self.deployment_finished()
+
+    def deployment_finished(self):
+        self.is_deploying = False
+        self.start_btn.config(state=tk.NORMAL)
+        self.manual_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        self.status_label.config(text="Deployment complete.")
+        if self.compressed_payload and os.path.exists(self.compressed_payload):
+            try:
+                os.remove(self.compressed_payload)
+            except Exception:
+                pass
+        if not self.stop_event.is_set():
+            messagebox.showinfo(
+                "Done",
+                f"Deployment completed.\nResults saved to:\n{self.current_log_file}"
+            )
+
+    def stop_deployment(self):
+        self.stop_event.set()
+        self.status_label.config(text="Stopping… waiting for active transfers to finish.")
+        if self.executor:
+            self.executor.shutdown(wait=False)
+
+    # ── Manual Deployment ─────────────────────────────────────────────────────
+
+    def start_manual_deployment(self):
+        host_ip   = self.manual_host_ip.get().strip()
+        tills_str = self.manual_tills.get().strip()
+        source    = self.source_folder.get()
+
+        if not host_ip or not tills_str:
+            return messagebox.showerror("Error", "Enter Host IP and Till numbers")
+        try:
+            till_nums = [int(x.strip()) for x in tills_str.split(',') if x.strip().isdigit()]
+        except Exception:
+            return messagebox.showerror("Error", "Invalid till format. Use: 1, 3, 4")
+
+        self.logger.info(f"--- MANUAL DEPLOY: {host_ip} Tills: {till_nums} ---")
+        self.manual_btn.config(state=tk.DISABLED)
+        Thread(target=self.run_manual_logic, args=(source, host_ip, till_nums)).start()
+
+    def run_manual_logic(self, source, host_ip, till_nums):
+        prefix = '.'.join(host_ip.split('.')[:3])
+        try:
+            temp_payload = 'manual_payload.tar.gz'
+            self.logger.info("Compressing for manual deploy (level 1)...")
+            fast_compress(source, temp_payload)
+            self.logger.info(f"Compression done — {os.path.getsize(temp_payload)/1_048_576:.1f} MB")
+
+            for num in till_nums:
+                till_ip = f"{prefix}.{TILL_START_OCTET + num}"
+                self.logger.info(f"Manual → {till_ip}")
+                ssh = connect_ssh(till_ip, TILL_USER, TILL_PASS, TIMEOUT_CONNECT, self.logger)
+                if ssh:
+                    upload_and_extract(ssh, temp_payload, TILL_DEST_BASE,
+                                       "ETPStoreFrontV5.5", self.logger, keep_tar=False)
+                    ssh.close()
+                    self.logger.info(f"Manual: {till_ip} SUCCESS (chmod 777 applied)")
+                else:
+                    self.logger.error(f"Manual: {till_ip} unreachable")
+
+            os.remove(temp_payload)
+        except Exception as e:
+            self.logger.error(f"Manual error: {e}")
+        finally:
+            self.manual_btn.config(state=tk.NORMAL)
+            self.logger.info("--- MANUAL DEPLOYMENT END ---")
+
+
+# ==============================================================================
+#  ENTRY POINT
+# ==============================================================================
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app  = DeploymentGUI(root)
+    root.mainloop()
